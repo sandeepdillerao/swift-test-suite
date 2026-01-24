@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   FolderTree, 
   Plus, 
@@ -16,12 +17,56 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { TestSuiteDialog } from '@/components/testsuites/TestSuiteDialog';
+import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
 import { useTestSuites } from '@/hooks/useTestSuites';
 import { cn } from '@/lib/utils';
+import type { TestSuite } from '@/types';
+import { toast } from 'sonner';
 
 export const TestSuites = () => {
+  const navigate = useNavigate();
   const { data: suites = [], isLoading } = useTestSuites('1');
   const [selectedSuite, setSelectedSuite] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingSuite, setDeletingSuite] = useState<TestSuite | null>(null);
+
+  const handleCreate = () => {
+    setEditingSuite(null);
+    setDialogOpen(true);
+  };
+
+  const handleEdit = (suite: TestSuite) => {
+    setEditingSuite(suite);
+    setDialogOpen(true);
+  };
+
+  const handleView = (suite: TestSuite) => {
+    navigate(`/app/test-suites/${suite.id}`);
+  };
+
+  const handleDelete = (suite: TestSuite) => {
+    setDeletingSuite(suite);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (deletingSuite) {
+      toast.success('Test suite deleted');
+    }
+    setDeleteDialogOpen(false);
+    setDeletingSuite(null);
+  };
+
+  const handleSave = (data: Partial<TestSuite>) => {
+    if (editingSuite) {
+      toast.success('Test suite updated');
+    } else {
+      toast.success('Test suite created');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -41,7 +86,7 @@ export const TestSuites = () => {
             Organize test cases into logical groups
           </p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={handleCreate}>
           <Plus className="h-4 w-4" />
           New Suite
         </Button>
@@ -82,11 +127,18 @@ export const TestSuites = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleView(suite)}>
+                    <ChevronRight className="mr-2 h-4 w-4" />
+                    View Details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleEdit(suite)}>
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit
                   </DropdownMenuItem>
-                  <DropdownMenuItem className="text-destructive">
+                  <DropdownMenuItem 
+                    className="text-destructive"
+                    onClick={() => handleDelete(suite)}
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </DropdownMenuItem>
@@ -102,7 +154,15 @@ export const TestSuites = () => {
                   <TestTube2 className="h-4 w-4" />
                   <span>{suite.testCasesCount} cases</span>
                 </div>
-                <Button variant="ghost" size="sm" className="gap-1">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="gap-1"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleView(suite);
+                  }}
+                >
                   View
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -120,12 +180,30 @@ export const TestSuites = () => {
           <p className="text-muted-foreground text-sm mt-1">
             Create your first test suite to organize your test cases
           </p>
-          <Button className="mt-4 gap-2">
+          <Button className="mt-4 gap-2" onClick={handleCreate}>
             <Plus className="h-4 w-4" />
             Create Suite
           </Button>
         </Card>
       )}
+
+      {/* Create/Edit Dialog */}
+      <TestSuiteDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        suite={editingSuite}
+        suites={suites}
+        onSave={handleSave}
+      />
+
+      {/* Delete Confirmation */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Test Suite"
+        description={`Are you sure you want to delete "${deletingSuite?.name}"? This will not delete the test cases in this suite.`}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

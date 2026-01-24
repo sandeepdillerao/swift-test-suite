@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   useReactTable,
   getCoreRowModel,
@@ -13,7 +14,6 @@ import {
 import { 
   Plus, 
   Search, 
-  Filter,
   MoreHorizontal,
   Eye,
   Pencil,
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -48,15 +48,86 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
-import { useTestCases } from '@/hooks/useTestCases';
-import type { TestCase } from '@/types';
+import { TestCaseDialog } from '@/components/testcases/TestCaseDialog';
+import { QuickEditStatus, QuickEditPriority } from '@/components/testcases/QuickEditPopover';
+import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
+import { useTestCases, useCreateTestCase, useUpdateTestCase, useDeleteTestCase } from '@/hooks/useTestCases';
+import { useTestSuites } from '@/hooks/useTestSuites';
+import type { TestCase, TestStatus, Priority } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
+import { toast } from 'sonner';
 
 export const TestCases = () => {
+  const navigate = useNavigate();
   const { data: testCases = [], isLoading } = useTestCases();
+  const { data: suites = [] } = useTestSuites('1');
+  const createTestCase = useCreateTestCase();
+  const updateTestCase = useUpdateTestCase();
+  const deleteTestCase = useDeleteTestCase();
+  
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTestCase, setEditingTestCase] = useState<TestCase | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingTestCase, setDeletingTestCase] = useState<TestCase | null>(null);
+
+  const handleCreate = () => {
+    setEditingTestCase(null);
+    setDialogOpen(true);
+  };
+
+  const handleEdit = (testCase: TestCase) => {
+    setEditingTestCase(testCase);
+    setDialogOpen(true);
+  };
+
+  const handleView = (testCase: TestCase) => {
+    navigate(`/app/test-cases/${testCase.id}`);
+  };
+
+  const handleDelete = (testCase: TestCase) => {
+    setDeletingTestCase(testCase);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (deletingTestCase) {
+      deleteTestCase.mutate(deletingTestCase.id, {
+        onSuccess: () => toast.success('Test case deleted'),
+      });
+    }
+    setDeleteDialogOpen(false);
+    setDeletingTestCase(null);
+  };
+
+  const handleSave = (data: Partial<TestCase>) => {
+    if (editingTestCase) {
+      updateTestCase.mutate(
+        { id: editingTestCase.id, data },
+        { onSuccess: () => toast.success('Test case updated') }
+      );
+    } else {
+      createTestCase.mutate(data, {
+        onSuccess: () => toast.success('Test case created'),
+      });
+    }
+  };
+
+  const handleQuickStatusChange = (testCase: TestCase, status: TestStatus) => {
+    updateTestCase.mutate(
+      { id: testCase.id, data: { status } },
+      { onSuccess: () => toast.success('Status updated') }
+    );
+  };
+
+  const handleQuickPriorityChange = (testCase: TestCase, priority: Priority) => {
+    updateTestCase.mutate(
+      { id: testCase.id, data: { priority } },
+      { onSuccess: () => toast.success('Priority updated') }
+    );
+  };
 
   const columns = useMemo<ColumnDef<TestCase>[]>(
     () => [
@@ -83,7 +154,10 @@ export const TestCases = () => {
           </Button>
         ),
         cell: ({ row }) => (
-          <div className="max-w-[300px]">
+          <div 
+            className="max-w-[300px] cursor-pointer hover:text-primary"
+            onClick={() => handleView(row.original)}
+          >
             <p className="font-medium truncate">{row.getValue('title')}</p>
             <p className="text-xs text-muted-foreground truncate">
               {row.original.description}
@@ -94,13 +168,31 @@ export const TestCases = () => {
       {
         accessorKey: 'status',
         header: 'Status',
-        cell: ({ row }) => <StatusBadge status={row.getValue('status')} />,
+        cell: ({ row }) => (
+          <QuickEditStatus
+            currentValue={row.getValue('status')}
+            onSelect={(status) => handleQuickStatusChange(row.original, status)}
+          >
+            <button className="cursor-pointer hover:opacity-80">
+              <StatusBadge status={row.getValue('status')} />
+            </button>
+          </QuickEditStatus>
+        ),
         filterFn: (row, id, value) => value.includes(row.getValue(id)),
       },
       {
         accessorKey: 'priority',
         header: 'Priority',
-        cell: ({ row }) => <PriorityBadge priority={row.getValue('priority')} />,
+        cell: ({ row }) => (
+          <QuickEditPriority
+            currentValue={row.getValue('priority')}
+            onSelect={(priority) => handleQuickPriorityChange(row.original, priority)}
+          >
+            <button className="cursor-pointer hover:opacity-80">
+              <PriorityBadge priority={row.getValue('priority')} />
+            </button>
+          </QuickEditPriority>
+        ),
         filterFn: (row, id, value) => value.includes(row.getValue(id)),
       },
       {
@@ -152,15 +244,18 @@ export const TestCases = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleView(row.original)}>
                 <Eye className="mr-2 h-4 w-4" />
                 View
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleEdit(row.original)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit
               </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">
+              <DropdownMenuItem 
+                className="text-destructive"
+                onClick={() => handleDelete(row.original)}
+              >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </DropdownMenuItem>
@@ -169,7 +264,7 @@ export const TestCases = () => {
         ),
       },
     ],
-    []
+    [updateTestCase]
   );
 
   const table = useReactTable({
@@ -212,7 +307,7 @@ export const TestCases = () => {
             Manage and organize your test cases
           </p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={handleCreate}>
           <Plus className="h-4 w-4" />
           New Test Case
         </Button>
@@ -351,6 +446,24 @@ export const TestCases = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Create/Edit Dialog */}
+      <TestCaseDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        testCase={editingTestCase}
+        suites={suites.map(s => ({ id: s.id, name: s.name }))}
+        onSave={handleSave}
+      />
+
+      {/* Delete Confirmation */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Test Case"
+        description={`Are you sure you want to delete "${deletingTestCase?.title}"? This action cannot be undone.`}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };
