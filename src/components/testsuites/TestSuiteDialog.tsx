@@ -68,13 +68,13 @@ export const TestSuiteDialog = ({
       form.reset({
         name: suite.name,
         description: suite.description,
-        parentId: suite.parentId || '',
+        parentId: suite.parentId || '__none__',
       });
     } else {
       form.reset({
         name: '',
         description: '',
-        parentId: '',
+        parentId: '__none__',
       });
     }
   }, [suite, form]);
@@ -83,7 +83,7 @@ export const TestSuiteDialog = ({
     onSave({
       ...data,
       projectId: '1',
-      parentId: data.parentId || undefined,
+      parentId: data.parentId === '__none__' ? undefined : data.parentId || undefined,
     });
     onOpenChange(false);
   };
@@ -147,7 +147,7 @@ export const TestSuiteDialog = ({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">None (Root Level)</SelectItem>
+                      <SelectItem value="__none__">None (Root Level)</SelectItem>
                       {parentOptions.map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name}
