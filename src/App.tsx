@@ -9,8 +9,12 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/app/Dashboard";
 import { TestCases } from "@/pages/app/TestCases";
+import { TestCaseDetail } from "@/pages/app/TestCaseDetail";
 import { TestSuites } from "@/pages/app/TestSuites";
+import { TestSuiteDetail } from "@/pages/app/TestSuiteDetail";
 import { TestRuns } from "@/pages/app/TestRuns";
+import { Integrations } from "@/pages/app/Integrations";
+import { UserManagement } from "@/pages/app/UserManagement";
 import { Settings } from "@/pages/app/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -40,8 +44,12 @@ const App = () => (
             <Route path="/app" element={<AppLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="test-cases" element={<TestCases />} />
+              <Route path="test-cases/:id" element={<TestCaseDetail />} />
               <Route path="test-suites" element={<TestSuites />} />
+              <Route path="test-suites/:id" element={<TestSuiteDetail />} />
               <Route path="test-runs" element={<TestRuns />} />
+              <Route path="integrations" element={<Integrations />} />
+              <Route path="users" element={<UserManagement />} />
               <Route path="settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
