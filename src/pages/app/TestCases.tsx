@@ -20,7 +20,9 @@ import {
   Trash2,
   ArrowUpDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Download,
+  Upload
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +53,7 @@ import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { TestCaseDialog } from '@/components/testcases/TestCaseDialog';
 import { QuickEditStatus, QuickEditPriority } from '@/components/testcases/QuickEditPopover';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
+import { ImportExportDialog } from '@/components/testcases/ImportExportDialog';
 import { useTestCases, useCreateTestCase, useUpdateTestCase, useDeleteTestCase } from '@/hooks/useTestCases';
 import { useTestSuites } from '@/hooks/useTestSuites';
 import type { TestCase, TestStatus, Priority } from '@/types';
@@ -71,6 +74,7 @@ export const TestCases = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTestCase, setEditingTestCase] = useState<TestCase | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [importExportOpen, setImportExportOpen] = useState(false);
   const [deletingTestCase, setDeletingTestCase] = useState<TestCase | null>(null);
 
   const handleCreate = () => {
@@ -127,6 +131,12 @@ export const TestCases = () => {
       { id: testCase.id, data: { priority } },
       { onSuccess: () => toast.success('Priority updated') }
     );
+  };
+
+  const handleBulkImport = async (cases: Partial<TestCase>[]) => {
+    for (const testCaseData of cases) {
+      await createTestCase.mutateAsync(testCaseData);
+    }
   };
 
   const columns = useMemo<ColumnDef<TestCase>[]>(
@@ -307,10 +317,16 @@ export const TestCases = () => {
             Manage and organize your test cases
           </p>
         </div>
-        <Button className="gap-2" onClick={handleCreate}>
-          <Plus className="h-4 w-4" />
-          New Test Case
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setImportExportOpen(true)}>
+            <Download className="h-4 w-4" />
+            Import/Export
+          </Button>
+          <Button className="gap-2" onClick={handleCreate}>
+            <Plus className="h-4 w-4" />
+            New Test Case
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -463,6 +479,15 @@ export const TestCases = () => {
         title="Delete Test Case"
         description={`Are you sure you want to delete "${deletingTestCase?.title}"? This action cannot be undone.`}
         onConfirm={confirmDelete}
+      />
+
+      {/* Import/Export Dialog */}
+      <ImportExportDialog
+        open={importExportOpen}
+        onOpenChange={setImportExportOpen}
+        testCases={testCases}
+        suites={suites.map(s => ({ id: s.id, name: s.name }))}
+        onImport={handleBulkImport}
       />
     </div>
   );

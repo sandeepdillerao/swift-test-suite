@@ -13,7 +13,8 @@ import {
   User,
   FlaskConical,
   Link2,
-  Users
+  Users,
+  Tag
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ const navigation = [
   { name: 'Test Cases', href: '/app/test-cases', icon: TestTube2 },
   { name: 'Test Suites', href: '/app/test-suites', icon: FolderTree },
   { name: 'Test Runs', href: '/app/test-runs', icon: Play },
+  { name: 'Releases', href: '/app/releases', icon: Tag },
   { name: 'Integrations', href: '/app/integrations', icon: Link2 },
   { name: 'Users', href: '/app/users', icon: Users },
   { name: 'Settings', href: '/app/settings', icon: Settings },
