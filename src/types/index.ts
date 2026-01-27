@@ -3,6 +3,7 @@
 export type TestStatus = 'passed' | 'failed' | 'blocked' | 'not_run' | 'in_progress';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
 export type TestType = 'manual' | 'automated';
+export type ReleaseStatus = 'planning' | 'in_progress' | 'released' | 'archived';
 
 export interface User {
   id: string;
@@ -68,10 +69,27 @@ export interface TestStep {
   expectedResult: string;
 }
 
+export interface Release {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  projectId: string;
+  status: ReleaseStatus;
+  plannedDate?: string;
+  releasedDate?: string;
+  testRunIds: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TestRun {
   id: string;
   name: string;
+  description?: string;
   projectId: string;
+  releaseId?: string;
   status: 'active' | 'completed' | 'archived';
   testCases: TestRunCase[];
   createdBy: string;
@@ -79,6 +97,8 @@ export interface TestRun {
   startedAt: string;
   completedAt?: string;
   passRate: number;
+  environment?: string;
+  buildNumber?: string;
 }
 
 export interface TestRunCase {
@@ -91,6 +111,18 @@ export interface TestRunCase {
   duration?: number;
   comment?: string;
   defects?: string[];
+  actualResult?: string;
+}
+
+export interface TestRunHistory {
+  id: string;
+  testRunId: string;
+  testCaseId: string;
+  status: TestStatus;
+  executedBy: string;
+  executedAt: string;
+  comment?: string;
+  duration?: number;
 }
 
 export interface DashboardStats {
@@ -111,4 +143,18 @@ export interface ActivityItem {
   userId: string;
   userName: string;
   timestamp: string;
+}
+
+// Export format types
+export interface TestCaseExport {
+  id: string;
+  title: string;
+  description: string;
+  preconditions: string;
+  steps: string;
+  expectedResult: string;
+  priority: string;
+  type: string;
+  suite: string;
+  tags: string;
 }

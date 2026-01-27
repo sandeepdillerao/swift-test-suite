@@ -13,6 +13,8 @@ import { TestCaseDetail } from "@/pages/app/TestCaseDetail";
 import { TestSuites } from "@/pages/app/TestSuites";
 import { TestSuiteDetail } from "@/pages/app/TestSuiteDetail";
 import { TestRuns } from "@/pages/app/TestRuns";
+import { TestRunDetail } from "@/pages/app/TestRunDetail";
+import { Releases } from "@/pages/app/Releases";
 import { Integrations } from "@/pages/app/Integrations";
 import { UserManagement } from "@/pages/app/UserManagement";
 import { Settings } from "@/pages/app/Settings";
@@ -48,6 +50,8 @@ const App = () => (
               <Route path="test-suites" element={<TestSuites />} />
               <Route path="test-suites/:id" element={<TestSuiteDetail />} />
               <Route path="test-runs" element={<TestRuns />} />
+              <Route path="test-runs/:id" element={<TestRunDetail />} />
+              <Route path="releases" element={<Releases />} />
               <Route path="integrations" element={<Integrations />} />
               <Route path="users" element={<UserManagement />} />
               <Route path="settings" element={<Settings />} />

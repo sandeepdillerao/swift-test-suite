@@ -1,6 +1,6 @@
 import type { 
   User, Organization, Project, TestSuite, TestCase, 
-  TestRun, DashboardStats, ActivityItem 
+  TestRun, TestRunCase, TestRunHistory, Release, DashboardStats, ActivityItem 
 } from '@/types';
 
 // Mock Users
@@ -218,30 +218,109 @@ export const mockTestCases: TestCase[] = [
   },
 ];
 
-// Mock Test Runs
+// Mock Releases
+export const mockReleases: Release[] = [
+  {
+    id: '1',
+    name: 'Release 2.5',
+    version: '2.5.0',
+    description: 'Major feature release with checkout improvements',
+    projectId: '1',
+    status: 'released',
+    plannedDate: '2024-06-15T00:00:00Z',
+    releasedDate: '2024-06-18T00:00:00Z',
+    testRunIds: ['2'],
+    createdBy: '1',
+    createdAt: '2024-06-01T00:00:00Z',
+    updatedAt: '2024-06-18T00:00:00Z',
+  },
+  {
+    id: '2',
+    name: 'Sprint 24',
+    version: '2.6.0-beta',
+    description: 'Sprint 24 development cycle',
+    projectId: '1',
+    status: 'in_progress',
+    plannedDate: '2024-06-30T00:00:00Z',
+    testRunIds: ['1'],
+    createdBy: '2',
+    createdAt: '2024-06-10T00:00:00Z',
+    updatedAt: '2024-06-20T00:00:00Z',
+  },
+  {
+    id: '3',
+    name: 'Release 3.0',
+    version: '3.0.0',
+    description: 'Major platform overhaul',
+    projectId: '1',
+    status: 'planning',
+    plannedDate: '2024-08-01T00:00:00Z',
+    testRunIds: [],
+    createdBy: '1',
+    createdAt: '2024-06-15T00:00:00Z',
+    updatedAt: '2024-06-15T00:00:00Z',
+  },
+];
+
+// Mock Test Run Cases (detailed execution data)
+export const mockTestRunCases: TestRunCase[] = [
+  { id: 'trc-1', testCaseId: 'TC-001', testRunId: '1', status: 'passed', executedBy: '3', executedAt: '2024-06-20T09:30:00Z', duration: 120, comment: 'All steps passed successfully' },
+  { id: 'trc-2', testCaseId: 'TC-002', testRunId: '1', status: 'passed', executedBy: '3', executedAt: '2024-06-20T09:45:00Z', duration: 90, comment: 'Verified error message display' },
+  { id: 'trc-3', testCaseId: 'TC-003', testRunId: '1', status: 'passed', executedBy: '4', executedAt: '2024-06-20T10:00:00Z', duration: 45, comment: 'Automated test passed' },
+  { id: 'trc-4', testCaseId: 'TC-004', testRunId: '1', status: 'failed', executedBy: '4', executedAt: '2024-06-20T10:15:00Z', duration: 60, comment: 'Cart total not updating correctly', defects: ['BUG-123'], actualResult: 'Cart shows incorrect total after removal' },
+  { id: 'trc-5', testCaseId: 'TC-005', testRunId: '1', status: 'blocked', executedBy: '3', executedAt: '2024-06-20T10:30:00Z', duration: 30, comment: 'Payment gateway unavailable', defects: ['BUG-124'] },
+  { id: 'trc-6', testCaseId: 'TC-006', testRunId: '1', status: 'not_run' },
+  { id: 'trc-7', testCaseId: 'TC-007', testRunId: '1', status: 'passed', executedBy: '4', executedAt: '2024-06-20T11:00:00Z', duration: 35 },
+  { id: 'trc-8', testCaseId: 'TC-008', testRunId: '1', status: 'in_progress', executedBy: '3' },
+  // Run 2 cases
+  { id: 'trc-9', testCaseId: 'TC-001', testRunId: '2', status: 'passed', executedBy: '4', executedAt: '2024-06-18T09:30:00Z', duration: 115 },
+  { id: 'trc-10', testCaseId: 'TC-002', testRunId: '2', status: 'passed', executedBy: '4', executedAt: '2024-06-18T09:45:00Z', duration: 88 },
+  { id: 'trc-11', testCaseId: 'TC-003', testRunId: '2', status: 'passed', executedBy: '4', executedAt: '2024-06-18T10:00:00Z', duration: 42 },
+  { id: 'trc-12', testCaseId: 'TC-005', testRunId: '2', status: 'passed', executedBy: '4', executedAt: '2024-06-18T10:30:00Z', duration: 180 },
+];
+
+// Mock Test Run History (audit trail)
+export const mockTestRunHistory: TestRunHistory[] = [
+  { id: 'h-1', testRunId: '1', testCaseId: 'TC-001', status: 'passed', executedBy: '3', executedAt: '2024-06-20T09:30:00Z', duration: 120 },
+  { id: 'h-2', testRunId: '1', testCaseId: 'TC-002', status: 'passed', executedBy: '3', executedAt: '2024-06-20T09:45:00Z', duration: 90 },
+  { id: 'h-3', testRunId: '1', testCaseId: 'TC-003', status: 'passed', executedBy: '4', executedAt: '2024-06-20T10:00:00Z', duration: 45 },
+  { id: 'h-4', testRunId: '1', testCaseId: 'TC-004', status: 'failed', executedBy: '4', executedAt: '2024-06-20T10:15:00Z', duration: 60, comment: 'Cart total not updating' },
+  { id: 'h-5', testRunId: '1', testCaseId: 'TC-005', status: 'blocked', executedBy: '3', executedAt: '2024-06-20T10:30:00Z', duration: 30, comment: 'Payment gateway down' },
+  { id: 'h-6', testRunId: '1', testCaseId: 'TC-007', status: 'passed', executedBy: '4', executedAt: '2024-06-20T11:00:00Z', duration: 35 },
+];
+
+// Mock Test Runs (enhanced with test cases)
 export const mockTestRuns: TestRun[] = [
   {
     id: '1',
     name: 'Sprint 24 Regression',
+    description: 'Full regression test for Sprint 24 features',
     projectId: '1',
+    releaseId: '2',
     status: 'active',
-    testCases: [],
+    testCases: mockTestRunCases.filter(tc => tc.testRunId === '1'),
     createdBy: '2',
     assignedTo: '3',
     startedAt: '2024-06-20T08:00:00Z',
-    passRate: 75.5,
+    passRate: 62.5,
+    environment: 'Staging',
+    buildNumber: 'build-2024.06.20.1',
   },
   {
     id: '2',
     name: 'Release 2.5 Smoke Test',
+    description: 'Smoke test for Release 2.5 deployment',
     projectId: '1',
+    releaseId: '1',
     status: 'completed',
-    testCases: [],
+    testCases: mockTestRunCases.filter(tc => tc.testRunId === '2'),
     createdBy: '2',
     assignedTo: '4',
     startedAt: '2024-06-18T09:00:00Z',
     completedAt: '2024-06-18T17:00:00Z',
-    passRate: 92.0,
+    passRate: 100,
+    environment: 'Production',
+    buildNumber: 'build-2024.06.18.1',
   },
 ];
 

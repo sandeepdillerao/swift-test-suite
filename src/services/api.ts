@@ -1,9 +1,11 @@
 import { 
   mockUsers, mockProjects, mockTestSuites, mockTestCases, 
-  mockTestRuns, mockDashboardStats, mockOrganization, delay 
+  mockTestRuns, mockTestRunCases, mockTestRunHistory, mockReleases,
+  mockDashboardStats, mockOrganization, delay 
 } from '@/lib/mock-data';
 import type { 
-  User, Project, TestSuite, TestCase, TestRun, DashboardStats, Organization 
+  User, Project, TestSuite, TestCase, TestRun, TestRunCase, 
+  TestRunHistory, Release, DashboardStats, Organization 
 } from '@/types';
 
 // Simulated API delay (ms)
@@ -131,17 +133,81 @@ export const api = {
     },
     create: async (data: Partial<TestRun>): Promise<TestRun> => {
       await delay(API_DELAY);
+      const selectedCases = data.testCases || [];
       const newRun: TestRun = {
         id: String(mockTestRuns.length + 1),
         name: data.name || 'New Test Run',
+        description: data.description,
         projectId: data.projectId || '1',
+        releaseId: data.releaseId,
         status: 'active',
-        testCases: [],
+        testCases: selectedCases,
         createdBy: '1',
+        assignedTo: data.assignedTo,
         startedAt: new Date().toISOString(),
         passRate: 0,
+        environment: data.environment,
+        buildNumber: data.buildNumber,
       };
       return newRun;
+    },
+    update: async (id: string, data: Partial<TestRun>): Promise<TestRun> => {
+      await delay(API_DELAY);
+      const existing = mockTestRuns.find(r => r.id === id);
+      if (!existing) throw new Error('Test run not found');
+      return { ...existing, ...data };
+    },
+    delete: async (id: string): Promise<void> => {
+      await delay(API_DELAY);
+    },
+    getHistory: async (runId: string): Promise<TestRunHistory[]> => {
+      await delay(API_DELAY);
+      return mockTestRunHistory.filter(h => h.testRunId === runId);
+    },
+    updateTestCase: async (runId: string, testCaseId: string, data: Partial<TestRunCase>): Promise<TestRunCase> => {
+      await delay(API_DELAY);
+      const existing = mockTestRunCases.find(tc => tc.testRunId === runId && tc.testCaseId === testCaseId);
+      if (!existing) throw new Error('Test run case not found');
+      return { ...existing, ...data };
+    },
+  },
+
+  // Releases
+  releases: {
+    list: async (projectId?: string): Promise<Release[]> => {
+      await delay(API_DELAY);
+      if (projectId) return mockReleases.filter(r => r.projectId === projectId);
+      return mockReleases;
+    },
+    get: async (id: string): Promise<Release | undefined> => {
+      await delay(API_DELAY);
+      return mockReleases.find(r => r.id === id);
+    },
+    create: async (data: Partial<Release>): Promise<Release> => {
+      await delay(API_DELAY);
+      const newRelease: Release = {
+        id: String(mockReleases.length + 1),
+        name: data.name || 'New Release',
+        version: data.version || '1.0.0',
+        description: data.description || '',
+        projectId: data.projectId || '1',
+        status: 'planning',
+        plannedDate: data.plannedDate,
+        testRunIds: [],
+        createdBy: '1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      return newRelease;
+    },
+    update: async (id: string, data: Partial<Release>): Promise<Release> => {
+      await delay(API_DELAY);
+      const existing = mockReleases.find(r => r.id === id);
+      if (!existing) throw new Error('Release not found');
+      return { ...existing, ...data, updatedAt: new Date().toISOString() };
+    },
+    delete: async (id: string): Promise<void> => {
+      await delay(API_DELAY);
     },
   },
 
