@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Sparkles, Check, X, Loader2, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sparkles, Check, X, Loader2, ExternalLink, ChevronDown, ChevronUp, AlertCircle, Settings as SettingsIcon } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useAIConfigStore, AI_PROVIDERS } from '@/stores/aiConfigStore';
 import {
   Dialog,
   DialogContent,
