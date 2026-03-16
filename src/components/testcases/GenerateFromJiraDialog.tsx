@@ -120,6 +120,9 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept }: Generat
   const [isGenerating, setIsGenerating] = useState(false);
   const [generated, setGenerated] = useState<GeneratedTestCase[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { activeProvider, activeModel, isConfigured } = useAIConfigStore();
+  const providerLabel = AI_PROVIDERS.find(p => p.provider === activeProvider)?.label || activeProvider;
 
   const handleGenerate = async () => {
     if (!ticketId.trim()) return;
