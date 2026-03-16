@@ -30,6 +30,34 @@ import { useToast } from '@/hooks/use-toast';
 export const Settings = () => {
   const { theme } = useUIStore();
   const { user } = useAuthStore();
+  const { activeProvider, activeModel, apiKeys, setActiveProvider, setActiveModel, setApiKey, isConfigured } = useAIConfigStore();
+  const { toast } = useToast();
+  const [showKeys, setShowKeys] = useState<Record<AIProvider, boolean>>({ gemini: false, openai: false, anthropic: false });
+  const [editingKey, setEditingKey] = useState<string>('');
+
+  const activeProviderConfig = AI_PROVIDERS.find(p => p.provider === activeProvider);
+
+  const toggleKeyVisibility = (provider: AIProvider) => {
+    setShowKeys(prev => ({ ...prev, [provider]: !prev[provider] }));
+  };
+
+  const handleSaveKey = (provider: AIProvider) => {
+    if (editingKey.trim()) {
+      setApiKey(provider, editingKey.trim());
+      setEditingKey('');
+      toast({ title: 'API Key saved', description: `${AI_PROVIDERS.find(p => p.provider === provider)?.label} key has been saved securely.` });
+    }
+  };
+
+  const handleRemoveKey = (provider: AIProvider) => {
+    setApiKey(provider, '');
+    toast({ title: 'API Key removed', description: `${AI_PROVIDERS.find(p => p.provider === provider)?.label} key has been removed.` });
+  };
+
+  const maskKey = (key: string) => {
+    if (key.length <= 8) return '•'.repeat(key.length);
+    return key.slice(0, 4) + '•'.repeat(key.length - 8) + key.slice(-4);
+  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -40,6 +68,126 @@ export const Settings = () => {
           Manage your account and application preferences
         </p>
       </div>
+
+      {/* AI Configuration */}
+      <Card className="border-primary/20">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Bot className="h-5 w-5 text-primary" />
+            <CardTitle>AI Configuration</CardTitle>
+            {isConfigured() ? (
+              <Badge variant="outline" className="ml-auto gap-1 text-green-600 border-green-600/30 bg-green-500/10">
+                <CheckCircle2 className="h-3 w-3" /> Configured
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="ml-auto gap-1 text-amber-600 border-amber-600/30 bg-amber-500/10">
+                <AlertCircle className="h-3 w-3" /> Not configured
+              </Badge>
+            )}
+          </div>
+          <CardDescription>
+            Configure your AI provider to enable features like test case generation from Jira tickets
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Active Provider */}
+          <div className="space-y-2">
+            <Label>Active AI Provider</Label>
+            <Select value={activeProvider} onValueChange={(v) => setActiveProvider(v as AIProvider)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AI_PROVIDERS.map(p => (
+                  <SelectItem key={p.provider} value={p.provider}>
+                    <div className="flex items-center gap-2">
+                      <span>{p.label}</span>
+                      {apiKeys[p.provider] && (
+                        <CheckCircle2 className="h-3 w-3 text-green-500" />
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">{activeProviderConfig?.description}</p>
+          </div>
+
+          {/* Model Selection */}
+          <div className="space-y-2">
+            <Label>Model</Label>
+            <Select value={activeModel} onValueChange={setActiveModel}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {activeProviderConfig?.models.map(m => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+
+          {/* API Keys for all providers */}
+          <div className="space-y-4">
+            <Label className="text-base font-medium">API Keys</Label>
+            <p className="text-sm text-muted-foreground -mt-2">
+              Keys are stored locally in your browser and never sent to our servers
+            </p>
+
+            {AI_PROVIDERS.map(provider => (
+              <Card key={provider.provider} className={`border ${activeProvider === provider.provider ? 'border-primary/40 bg-primary/5' : 'border-border'}`}>
+                <CardContent className="py-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium text-sm">{provider.label}</span>
+                      {activeProvider === provider.provider && (
+                        <Badge variant="secondary" className="text-xs">Active</Badge>
+                      )}
+                    </div>
+                    {apiKeys[provider.provider] && (
+                      <Badge variant="outline" className="gap-1 text-green-600 border-green-600/30 text-xs">
+                        <CheckCircle2 className="h-3 w-3" /> Key set
+                      </Badge>
+                    )}
+                  </div>
+
+                  {apiKeys[provider.provider] ? (
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono">
+                        {showKeys[provider.provider] ? apiKeys[provider.provider] : maskKey(apiKeys[provider.provider])}
+                      </code>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleKeyVisibility(provider.provider)}>
+                        {showKeys[provider.provider] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => handleRemoveKey(provider.provider)}>
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        type="password"
+                        placeholder={`Enter ${provider.label} API key...`}
+                        value={editingKey}
+                        onChange={(e) => setEditingKey(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveKey(provider.provider)}
+                        className="flex-1 font-mono text-xs"
+                      />
+                      <Button size="sm" onClick={() => handleSaveKey(provider.provider)} disabled={!editingKey.trim()}>
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Profile Settings */}
       <Card>
