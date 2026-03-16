@@ -57,6 +57,11 @@ export interface TestCase {
   tags: string[];
   createdBy: string;
   assignedTo?: string;
+  jiraTicketId?: string;
+  jiraTicketUrl?: string;
+  jiraSubtaskId?: string;
+  jiraSubtaskUrl?: string;
+  jiraSyncStatus?: 'synced' | 'pending' | 'error' | 'not_linked';
   createdAt: string;
   updatedAt: string;
   lastRunAt?: string;
