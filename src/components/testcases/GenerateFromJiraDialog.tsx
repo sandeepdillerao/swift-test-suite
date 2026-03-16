@@ -177,6 +177,25 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept }: Generat
         </DialogHeader>
 
         <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+          {/* AI Provider Status */}
+          {!isConfigured() ? (
+            <div className="flex items-center gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-sm">
+              <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
+              <div className="flex-1">
+                <span className="font-medium">No AI provider configured.</span>{' '}
+                <span className="text-muted-foreground">Add an API key in settings to enable AI generation.</span>
+              </div>
+              <Button variant="outline" size="sm" className="gap-1 shrink-0" onClick={() => { onOpenChange(false); navigate('/app/settings'); }}>
+                <SettingsIcon className="h-3 w-3" /> Configure
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-muted text-xs text-muted-foreground">
+              <Sparkles className="h-3 w-3 text-primary" />
+              Using <span className="font-medium text-foreground">{providerLabel}</span> · <span className="font-mono">{activeModel}</span>
+            </div>
+          )}
+
           {/* Input */}
           <div className="flex gap-2">
             <div className="flex-1">
