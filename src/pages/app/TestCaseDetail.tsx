@@ -198,6 +198,59 @@ export const TestCaseDetail = () => {
             </CardContent>
           </Card>
 
+          {/* Jira Integration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Jira Integration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {testCase.jiraTicketId ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Ticket</span>
+                    <a
+                      href={testCase.jiraTicketUrl || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
+                    >
+                      🔷 {testCase.jiraTicketId}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  {testCase.jiraSubtaskId && (
+                    <>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Subtask</span>
+                        <a
+                          href={testCase.jiraSubtaskUrl || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
+                        >
+                          {testCase.jiraSubtaskId}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
+                    </>
+                  )}
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Sync</span>
+                    <Badge variant={testCase.jiraSyncStatus === 'synced' ? 'default' : 'secondary'} className="capitalize">
+                      {testCase.jiraSyncStatus || 'not_linked'}
+                    </Badge>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Not linked to any Jira ticket</p>
+              )}
+            </CardContent>
+          </Card>
           {/* Tags */}
           <Card>
             <CardHeader>

@@ -577,6 +577,34 @@ export const TestRunDetail = () => {
                                 </div>
                               </div>
                             )}
+                            {/* Jira Sync Info */}
+                            {testCase?.jiraTicketId && (
+                              <div className="p-3 bg-muted/50 rounded-lg space-y-2">
+                                <label className="text-sm font-medium flex items-center gap-2">
+                                  🔷 Jira Integration
+                                </label>
+                                <div className="text-xs space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Ticket</span>
+                                    <a href={testCase.jiraTicketUrl || '#'} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+                                      {testCase.jiraTicketId} <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  </div>
+                                  {testCase.jiraSubtaskId && (
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-muted-foreground">Subtask</span>
+                                      <span className="font-mono">{testCase.jiraSubtaskId}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">Comment sync</span>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {runCase.status !== 'not_run' ? '✓ Posted' : 'Pending'}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                             {executor && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <User className="h-4 w-4" />
