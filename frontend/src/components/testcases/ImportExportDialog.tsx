@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { TestCase, TestCaseExport } from '@/types';
 import { format } from 'date-fns';
 
@@ -23,6 +23,7 @@ interface ImportExportDialogProps {
   onOpenChange: (open: boolean) => void;
   testCases: TestCase[];
   suites: { id: string; name: string }[];
+  projectId?: string;
   onImport: (cases: Partial<TestCase>[]) => void;
 }
 
@@ -54,14 +55,14 @@ const SAMPLE_TEMPLATE: TestCaseExport[] = [
   },
 ];
 
-export const ImportExportDialog = ({ 
-  open, 
-  onOpenChange, 
-  testCases, 
+export const ImportExportDialog = ({
+  open,
+  onOpenChange,
+  testCases,
   suites,
-  onImport 
+  projectId,
+  onImport,
 }: ImportExportDialogProps) => {
-  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importedData, setImportedData] = useState<TestCaseExport[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
@@ -70,13 +71,13 @@ export const ImportExportDialog = ({
   const downloadTemplate = () => {
     const csv = generateCSV(SAMPLE_TEMPLATE);
     downloadFile(csv, 'test-case-template.csv', 'text/csv');
-    toast({ title: 'Template downloaded successfully' });
+    toast.success('Template downloaded successfully');
   };
 
   const downloadJSON = () => {
     const json = JSON.stringify(SAMPLE_TEMPLATE, null, 2);
     downloadFile(json, 'test-case-template.json', 'application/json');
-    toast({ title: 'JSON template downloaded successfully' });
+    toast.success('JSON template downloaded successfully');
   };
 
   const exportTestCases = (formatType: 'csv' | 'json') => {
@@ -100,7 +101,7 @@ export const ImportExportDialog = ({
       const json = JSON.stringify(exportData, null, 2);
       downloadFile(json, `test-cases-export-${format(new Date(), 'yyyy-MM-dd')}.json`, 'application/json');
     }
-    toast({ title: `Exported ${exportData.length} test cases` });
+    toast.success(`Exported ${exportData.length} test cases`);
   };
 
   const generateCSV = (data: TestCaseExport[]): string => {
@@ -226,7 +227,7 @@ export const ImportExportDialog = ({
       const testCasesToImport: Partial<TestCase>[] = importedData.map(tc => {
         // Find suite by name or use first suite
         const suite = suites.find(s => s.name.toLowerCase() === tc.suite.toLowerCase());
-        const suiteId = suite?.id || suites[0]?.id || '1';
+        const suiteId = suite?.id || suites[0]?.id;
 
         // Parse steps
         const stepStrings = tc.steps.split('|').filter(s => s.trim());
@@ -250,17 +251,17 @@ export const ImportExportDialog = ({
           priority: (['critical', 'high', 'medium', 'low'].includes(tc.priority) ? tc.priority : 'medium') as any,
           type: (['manual', 'automated'].includes(tc.type) ? tc.type : 'manual') as any,
           suiteId,
-          projectId: '1',
+          projectId,
           tags: tc.tags.split(',').map(t => t.trim()).filter(Boolean),
         };
       });
 
       onImport(testCasesToImport);
-      toast({ title: `Successfully imported ${testCasesToImport.length} test cases` });
+      toast.success(`Successfully imported ${testCasesToImport.length} test cases`);
       setImportedData([]);
       onOpenChange(false);
     } catch (error) {
-      toast({ title: 'Failed to import test cases', variant: 'destructive' });
+      toast.error('Failed to import test cases');
     } finally {
       setImporting(false);
     }

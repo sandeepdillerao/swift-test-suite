@@ -113,15 +113,18 @@ interface GenerateFromJiraDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAccept: (testCases: Partial<TestCase>[]) => void;
+  projectId?: string;
+  suites?: { id: string; name: string }[];
+  isAiConfigured?: boolean;
 }
 
-export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept }: GenerateFromJiraDialogProps) => {
+export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId, suites = [], isAiConfigured = false }: GenerateFromJiraDialogProps) => {
   const [ticketId, setTicketId] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generated, setGenerated] = useState<GeneratedTestCase[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { activeProvider, activeModel, isConfigured } = useAIConfigStore();
+  const { activeProvider, activeModel } = useAIConfigStore();
   const providerLabel = AI_PROVIDERS.find(p => p.provider === activeProvider)?.label || activeProvider;
 
   const handleGenerate = async () => {
@@ -153,8 +156,8 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept }: Generat
       tags: g.tags,
       jiraTicketId: ticketId.trim().toUpperCase(),
       jiraSyncStatus: 'synced' as const,
-      projectId: '1',
-      suiteId: '1',
+      projectId,
+      suiteId: suites[0]?.id,
     })));
     onOpenChange(false);
     setGenerated([]);
@@ -178,7 +181,7 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept }: Generat
 
         <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
           {/* AI Provider Status */}
-          {!isConfigured() ? (
+          {!isAiConfigured ? (
             <div className="flex items-center gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/10 text-sm">
               <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
               <div className="flex-1">

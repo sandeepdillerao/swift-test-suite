@@ -72,7 +72,7 @@ export const Releases = () => {
 
   const handleSave = async (data: Partial<Release>) => {
     try {
-      await createRelease.mutateAsync(data);
+      await createRelease.mutateAsync({ ...data, projectId });
       toast.success('Release created successfully');
     } catch (error) {
       toast.error('Failed to create release');

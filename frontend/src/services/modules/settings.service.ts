@@ -50,8 +50,8 @@ export const settingsService = {
   getApiKeys: () =>
     httpClient.get<ApiKeyStatus[]>('/settings/api-keys').then((r) => r.data),
 
-  setApiKey: (provider: string, apiKey: string) =>
-    httpClient.post<{ message: string }>(`/settings/api-keys/${provider}`, { apiKey }).then((r) => r.data),
+  setApiKey: (provider: string, key: string) =>
+    httpClient.post<{ message: string }>(`/settings/api-keys/${provider}`, { key }).then((r) => r.data),
 
   deleteApiKey: (provider: string) =>
     httpClient.delete<{ message: string }>(`/settings/api-keys/${provider}`).then((r) => r.data),

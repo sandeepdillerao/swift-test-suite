@@ -80,7 +80,6 @@ export const ReleaseDialog = ({ open, onOpenChange, release, onSave }: ReleaseDi
   const onSubmit = (data: FormData) => {
     onSave({
       ...data,
-      projectId: '1',
       plannedDate: data.plannedDate ? new Date(data.plannedDate).toISOString() : undefined,
     });
     onOpenChange(false);

@@ -7,8 +7,6 @@ import {
   Palette,
   Building2,
   Bot,
-  Eye,
-  EyeOff,
   CheckCircle2,
   AlertCircle,
   Sparkles,
@@ -53,12 +51,8 @@ export const Settings = () => {
   const { user, setUser } = useAuthStore();
   const queryClient = useQueryClient();
 
-  // AI config store (local cache, synced to backend)
-  const {
-    activeProvider, activeModel, apiKeys,
-    setActiveProvider, setActiveModel, setApiKey,
-    isConfigured,
-  } = useAIConfigStore();
+  // AI config store — only UI preferences (provider/model), no keys
+  const { activeProvider, activeModel, setActiveProvider, setActiveModel } = useAIConfigStore();
 
   // ── Settings from backend ──────────────────────────────────────────────────
   const { data: settings, isLoading: settingsLoading } = useQuery({
@@ -156,29 +150,24 @@ export const Settings = () => {
   });
 
   // ── AI key management ──────────────────────────────────────────────────────
-  const [showKeys, setShowKeys] = useState<Record<AIProvider, boolean>>({
-    gemini: false, openai: false, anthropic: false,
-  });
   const [editingKeys, setEditingKeys] = useState<Record<AIProvider, string>>({
     gemini: '', openai: '', anthropic: '',
   });
 
   const setApiKeyMutation = useMutation({
-    mutationFn: ({ provider, apiKey }: { provider: string; apiKey: string }) =>
-      api.settings.setApiKey(provider, apiKey),
-    onSuccess: (_, { provider, apiKey }) => {
-      setApiKey(provider as AIProvider, apiKey);
+    mutationFn: ({ provider, key }: { provider: string; key: string }) =>
+      api.settings.setApiKey(provider, key),
+    onSuccess: (_, { provider }) => {
       setEditingKeys((prev) => ({ ...prev, [provider]: '' }));
       queryClient.invalidateQueries({ queryKey: ['settings'] });
-      toast.success('API key saved securely');
+      toast.success('API key saved securely on server');
     },
     onError: () => toast.error('Failed to save API key'),
   });
 
   const deleteApiKeyMutation = useMutation({
     mutationFn: (provider: string) => api.settings.deleteApiKey(provider),
-    onSuccess: (_, provider) => {
-      setApiKey(provider as AIProvider, '');
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       toast.success('API key removed');
     },
@@ -205,11 +194,6 @@ export const Settings = () => {
     updateAiMutation.mutate({ activeProvider: activeProvider, activeModel: model });
   };
 
-  const maskKey = (key: string) => {
-    if (key.length <= 8) return '•'.repeat(key.length);
-    return key.slice(0, 4) + '•'.repeat(key.length - 8) + key.slice(-4);
-  };
-
   const initials = user
     ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase()
     : 'U';
@@ -217,12 +201,11 @@ export const Settings = () => {
   const isAdminOrLead = user?.role === 'admin' || user?.role === 'qa_lead';
   const activeProviderConfig = AI_PROVIDERS.find((p) => p.provider === activeProvider);
 
-  // Use backend configuredProviders to determine key status
+  // Key status comes from backend only — keys are never stored client-side
   const configuredProviders = settings?.configuredProviders ?? [];
-  const isKeyConfigured = (provider: string) => {
-    const backendStatus = configuredProviders.find((cp) => cp.provider === provider);
-    return backendStatus?.configured || !!apiKeys[provider as AIProvider];
-  };
+  const isKeyConfigured = (provider: string) =>
+    configuredProviders.find((cp) => cp.provider === provider)?.configured ?? false;
+  const anyKeyConfigured = configuredProviders.some((cp) => cp.configured);
 
   return (
     <div className="flex gap-6 max-w-5xl">
@@ -501,7 +484,7 @@ export const Settings = () => {
                   Configure AI providers for test case generation and analysis
                 </p>
               </div>
-              {isConfigured() ? (
+              {anyKeyConfigured ? (
                 <Badge variant="outline" className="gap-1 text-green-600 border-green-600/30 bg-green-500/10">
                   <CheckCircle2 className="h-3 w-3" /> Configured
                 </Badge>
@@ -608,28 +591,10 @@ export const Settings = () => {
 
                         {configured ? (
                           <div className="flex items-center gap-2">
-                            <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono">
-                              {showKeys[provider.provider]
-                                ? (apiKeys[provider.provider] || '••••••••••••••••')
-                                : maskKey(apiKeys[provider.provider] || '••••••••••••••••')}
+                            <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono text-muted-foreground">
+                              ••••••••••••••••••••••••••••••••
                             </code>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() =>
-                                setShowKeys((prev) => ({
-                                  ...prev,
-                                  [provider.provider]: !prev[provider.provider],
-                                }))
-                              }
-                            >
-                              {showKeys[provider.provider] ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
-                            </Button>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Stored on server</span>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -656,7 +621,7 @@ export const Settings = () => {
                                 if (e.key === 'Enter' && currentEditKey.trim()) {
                                   setApiKeyMutation.mutate({
                                     provider: provider.provider,
-                                    apiKey: currentEditKey.trim(),
+                                    key: currentEditKey.trim(),
                                   });
                                 }
                               }}
@@ -667,7 +632,7 @@ export const Settings = () => {
                               onClick={() =>
                                 setApiKeyMutation.mutate({
                                   provider: provider.provider,
-                                  apiKey: currentEditKey.trim(),
+                                  key: currentEditKey.trim(),
                                 })
                               }
                               disabled={!currentEditKey.trim() || setApiKeyMutation.isPending}

@@ -102,7 +102,7 @@ export const api = {
     updateAi: settingsService.updateAi,
     updateOrganization: settingsService.updateOrganization,
     getApiKeys: () => settingsService.getApiKeys(),
-    setApiKey: (provider: string, apiKey: string) => settingsService.setApiKey(provider, apiKey),
+    setApiKey: (provider: string, key: string) => settingsService.setApiKey(provider, key),
     deleteApiKey: (provider: string) => settingsService.deleteApiKey(provider),
   },
 

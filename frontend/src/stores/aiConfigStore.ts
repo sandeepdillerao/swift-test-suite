@@ -31,47 +31,27 @@ export const AI_PROVIDERS: AIProviderConfig[] = [
   },
 ];
 
+// Only stores UI preferences — API keys are stored encrypted on the backend only
 interface AIConfigState {
   activeProvider: AIProvider;
   activeModel: string;
-  apiKeys: Record<AIProvider, string>;
   setActiveProvider: (provider: AIProvider) => void;
   setActiveModel: (model: string) => void;
-  setApiKey: (provider: AIProvider, key: string) => void;
-  getActiveApiKey: () => string;
-  isConfigured: () => boolean;
 }
 
 export const useAIConfigStore = create<AIConfigState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       activeProvider: 'gemini',
       activeModel: 'gemini-2.5-flash',
-      apiKeys: {
-        gemini: '',
-        openai: '',
-        anthropic: '',
-      },
       setActiveProvider: (provider) => {
-        const providerConfig = AI_PROVIDERS.find(p => p.provider === provider);
+        const providerConfig = AI_PROVIDERS.find((p) => p.provider === provider);
         set({
           activeProvider: provider,
           activeModel: providerConfig?.models[0] || '',
         });
       },
       setActiveModel: (model) => set({ activeModel: model }),
-      setApiKey: (provider, key) =>
-        set((state) => ({
-          apiKeys: { ...state.apiKeys, [provider]: key },
-        })),
-      getActiveApiKey: () => {
-        const state = get();
-        return state.apiKeys[state.activeProvider];
-      },
-      isConfigured: () => {
-        const state = get();
-        return !!state.apiKeys[state.activeProvider];
-      },
     }),
     {
       name: 'ai-config-storage',

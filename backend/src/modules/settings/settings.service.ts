@@ -42,7 +42,7 @@ export class SettingsService {
     };
 
     const encryptedKeys: Record<string, any> = (user.settings as any)?.encryptedApiKeys ?? {};
-    const configuredProviders = Object.keys(encryptedKeys);
+    const configuredProviders = VALID_PROVIDERS.map(p => ({ provider: p, configured: !!encryptedKeys[p] }));
 
     return {
       profile: {
@@ -55,10 +55,8 @@ export class SettingsService {
         role: user.role,
       },
       notifications,
-      ai: {
-        ...aiSettings,
-        configuredProviders,
-      },
+      ai: aiSettings,
+      configuredProviders,
       organization: user.organization ? {
         id: user.organization.id,
         name: user.organization.name,

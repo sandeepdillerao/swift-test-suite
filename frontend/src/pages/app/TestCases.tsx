@@ -50,6 +50,8 @@ import { GenerateFromJiraDialog } from '@/components/testcases/GenerateFromJiraD
 import { useTestCases, useCreateTestCase, useUpdateTestCase, useDeleteTestCase } from '@/hooks/useTestCases';
 import { useTestSuites } from '@/hooks/useTestSuites';
 import { useProjectStore } from '@/stores/projectStore';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/services/api';
 import type { TestCase, TestStatus, Priority } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -60,6 +62,8 @@ export const TestCases = () => {
   const projectId = currentProject?.id;
   const { data: testCases = [], isLoading } = useTestCases(projectId);
   const { data: suites = [] } = useTestSuites(projectId ?? '');
+  const { data: appSettings } = useQuery({ queryKey: ['settings'], queryFn: () => api.settings.getAll() });
+  const isAiConfigured = appSettings?.configuredProviders?.some((cp) => cp.configured) ?? false;
   const createTestCase = useCreateTestCase();
   const updateTestCase = useUpdateTestCase();
   const deleteTestCase = useDeleteTestCase();
@@ -128,7 +132,7 @@ export const TestCases = () => {
   };
 
   const handleAcceptGenerated = async (cases: Partial<TestCase>[]) => {
-    for (const d of cases) await createTestCase.mutateAsync(d);
+    for (const d of cases) await createTestCase.mutateAsync({ ...d, projectId });
     toast.success(`${cases.length} test cases created from Jira`);
   };
 
@@ -376,9 +380,9 @@ export const TestCases = () => {
 
       <TestCaseDialog open={dialogOpen} onOpenChange={setDialogOpen} testCase={editingTestCase} suites={suites.map(s => ({ id: s.id, name: s.name }))} onSave={handleSave} />
       <DeleteConfirmDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} title="Delete Test Case" description={`Are you sure you want to delete "${deletingTestCase?.title}"? This action cannot be undone.`} onConfirm={confirmDelete} />
-      <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} testCases={testCases} suites={suites.map(s => ({ id: s.id, name: s.name }))} onImport={handleBulkImport} />
+      <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} testCases={testCases} suites={suites.map(s => ({ id: s.id, name: s.name }))} projectId={projectId} onImport={handleBulkImport} />
       <JiraLinkDialog open={jiraLinkOpen} onOpenChange={setJiraLinkOpen} testCase={jiraLinkTarget} onSave={handleJiraLinkSave} onUnlink={handleJiraUnlink} />
-      <GenerateFromJiraDialog open={generateFromJiraOpen} onOpenChange={setGenerateFromJiraOpen} onAccept={handleAcceptGenerated} />
+      <GenerateFromJiraDialog open={generateFromJiraOpen} onOpenChange={setGenerateFromJiraOpen} onAccept={handleAcceptGenerated} projectId={projectId} suites={suites.map(s => ({ id: s.id, name: s.name }))} isAiConfigured={isAiConfigured} />
     </div>
   );
 };
