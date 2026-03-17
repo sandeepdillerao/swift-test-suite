@@ -51,6 +51,7 @@ export interface TestSuite {
 
 export interface TestCase {
   id: string;
+  tcId: string;
   title: string;
   description: string;
   preconditions?: string;

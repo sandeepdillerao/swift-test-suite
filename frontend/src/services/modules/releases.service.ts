@@ -4,8 +4,11 @@ import type { Release } from '@/types';
 export const releasesService = {
   list: (params?: { projectId?: string }) =>
     httpClient
-      .get<Release[]>('/releases', { params })
-      .then((r) => r.data),
+      .get<{ data: Release[] } | Release[]>('/releases', { params })
+      .then((r) => {
+        const payload = r.data as any;
+        return (Array.isArray(payload) ? payload : payload.data) as Release[];
+      }),
 
   get: (id: string) =>
     httpClient.get<Release>(`/releases/${id}`).then((r) => r.data),

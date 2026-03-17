@@ -15,6 +15,12 @@ import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { ProjectsModule } from './modules/projects/projects.module';
+import { TestSuitesModule } from './modules/test-suites/test-suites.module';
+import { TestCasesModule } from './modules/test-cases/test-cases.module';
+import { TestRunsModule } from './modules/test-runs/test-runs.module';
+import { ReleasesModule } from './modules/releases/releases.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -46,6 +52,12 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
     AuthModule,
     UsersModule,
     OrganizationsModule,
+    ProjectsModule,
+    TestSuitesModule,
+    TestCasesModule,
+    TestRunsModule,
+    ReleasesModule,
+    DashboardModule,
   ],
   providers: [
     {

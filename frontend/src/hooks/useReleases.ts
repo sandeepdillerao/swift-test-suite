@@ -6,6 +6,7 @@ export const useReleases = (projectId?: string) => {
   return useQuery({
     queryKey: ['releases', { projectId }],
     queryFn: () => api.releases.list(projectId),
+    enabled: !!projectId,
   });
 };
 

@@ -4,8 +4,11 @@ import type { TestRun, TestRunCase, TestRunHistory } from '@/types';
 export const testRunsService = {
   list: (params?: { projectId?: string }) =>
     httpClient
-      .get<TestRun[]>('/test-runs', { params })
-      .then((r) => r.data),
+      .get<{ data: TestRun[] } | TestRun[]>('/test-runs', { params })
+      .then((r) => {
+        const payload = r.data as any;
+        return (Array.isArray(payload) ? payload : payload.data) as TestRun[];
+      }),
 
   get: (id: string) =>
     httpClient.get<TestRun>(`/test-runs/${id}`).then((r) => r.data),

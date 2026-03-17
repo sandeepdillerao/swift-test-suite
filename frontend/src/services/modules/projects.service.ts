@@ -3,7 +3,10 @@ import type { Project } from '@/types';
 
 export const projectsService = {
   list: () =>
-    httpClient.get<Project[]>('/projects').then((r) => r.data),
+    httpClient.get<{ data: Project[] } | Project[]>('/projects').then((r) => {
+      const payload = r.data as any;
+      return (Array.isArray(payload) ? payload : payload.data) as Project[];
+    }),
 
   get: (id: string) =>
     httpClient.get<Project>(`/projects/${id}`).then((r) => r.data),

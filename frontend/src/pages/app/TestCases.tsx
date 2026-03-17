@@ -49,14 +49,17 @@ import { JiraLinkDialog } from '@/components/testcases/JiraLinkDialog';
 import { GenerateFromJiraDialog } from '@/components/testcases/GenerateFromJiraDialog';
 import { useTestCases, useCreateTestCase, useUpdateTestCase, useDeleteTestCase } from '@/hooks/useTestCases';
 import { useTestSuites } from '@/hooks/useTestSuites';
+import { useProjectStore } from '@/stores/projectStore';
 import type { TestCase, TestStatus, Priority } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 
 export const TestCases = () => {
   const navigate = useNavigate();
-  const { data: testCases = [], isLoading } = useTestCases();
-  const { data: suites = [] } = useTestSuites('1');
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id;
+  const { data: testCases = [], isLoading } = useTestCases(projectId);
+  const { data: suites = [] } = useTestSuites(projectId ?? '');
   const createTestCase = useCreateTestCase();
   const updateTestCase = useUpdateTestCase();
   const deleteTestCase = useDeleteTestCase();
@@ -132,10 +135,12 @@ export const TestCases = () => {
   const columns = useMemo<ColumnDef<TestCase>[]>(
     () => [
       {
-        accessorKey: 'id',
+        accessorKey: 'tcId',
         header: 'ID',
-        cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.getValue('id')}</span>,
-        size: 100,
+        cell: ({ row }) => (
+          <span className="font-mono text-xs font-semibold text-primary">{row.getValue('tcId')}</span>
+        ),
+        size: 90,
       },
       {
         accessorKey: 'title',

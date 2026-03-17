@@ -6,6 +6,7 @@ export const useTestRuns = (projectId?: string) => {
   return useQuery({
     queryKey: ['testRuns', { projectId }],
     queryFn: () => api.testRuns.list(projectId),
+    enabled: !!projectId,
   });
 };
 

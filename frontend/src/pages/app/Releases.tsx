@@ -31,7 +31,7 @@ import { ReleaseDialog } from '@/components/releases/ReleaseDialog';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
 import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { Release, ReleaseStatus } from '@/types';
 
 const statusConfig: Record<ReleaseStatus, { label: string; className: string; icon: typeof Tag }> = {
@@ -43,7 +43,6 @@ const statusConfig: Record<ReleaseStatus, { label: string; className: string; ic
 
 export const Releases = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const { data: releases = [], isLoading } = useReleases();
   const { data: testRuns = [] } = useTestRuns();
   const createRelease = useCreateRelease();
@@ -71,9 +70,9 @@ export const Releases = () => {
   const handleSave = async (data: Partial<Release>) => {
     try {
       await createRelease.mutateAsync(data);
-      toast({ title: 'Release created successfully' });
+      toast.success('Release created successfully');
     } catch (error) {
-      toast({ title: 'Failed to create release', variant: 'destructive' });
+      toast.error('Failed to create release');
     }
   };
 
@@ -81,10 +80,10 @@ export const Releases = () => {
     if (!selectedRelease) return;
     try {
       await deleteRelease.mutateAsync(selectedRelease.id);
-      toast({ title: 'Release deleted successfully' });
+      toast.success('Release deleted successfully');
       setDeleteDialogOpen(false);
     } catch (error) {
-      toast({ title: 'Failed to delete release', variant: 'destructive' });
+      toast.error('Failed to delete release');
     }
   };
 

@@ -20,7 +20,7 @@ export const TestSuiteDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: suite, isLoading: suiteLoading } = useTestSuite(id || '');
-  const { data: testCases = [], isLoading: casesLoading } = useTestCases('1', id);
+  const { data: testCases = [], isLoading: casesLoading } = useTestCases(undefined, id);
 
   const isLoading = suiteLoading || casesLoading;
 

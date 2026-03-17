@@ -72,7 +72,9 @@ export const TestCaseDetail = () => {
             Back to Test Cases
           </Button>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-sm text-muted-foreground">{testCase.id}</span>
+            <span className="font-mono text-sm font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded">
+              {testCase.tcId}
+            </span>
             <StatusBadge status={testCase.status} />
             <PriorityBadge priority={testCase.priority} />
           </div>

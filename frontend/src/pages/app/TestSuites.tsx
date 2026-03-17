@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  FolderTree, 
-  Plus, 
+import {
+  FolderTree,
+  Plus,
   ChevronRight,
   TestTube2,
   MoreHorizontal,
@@ -19,14 +19,21 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { TestSuiteDialog } from '@/components/testsuites/TestSuiteDialog';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
-import { useTestSuites } from '@/hooks/useTestSuites';
+import { useTestSuites, useCreateTestSuite, useUpdateTestSuite, useDeleteTestSuite } from '@/hooks/useTestSuites';
+import { useProjectStore } from '@/stores/projectStore';
 import { cn } from '@/lib/utils';
 import type { TestSuite } from '@/types';
 import { toast } from 'sonner';
 
 export const TestSuites = () => {
   const navigate = useNavigate();
-  const { data: suites = [], isLoading } = useTestSuites('1');
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id ?? '';
+  const { data: suites = [], isLoading } = useTestSuites(projectId);
+  const createSuite = useCreateTestSuite();
+  const updateSuite = useUpdateTestSuite();
+  const deleteSuite = useDeleteTestSuite();
+
   const [selectedSuite, setSelectedSuite] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null);
@@ -54,7 +61,10 @@ export const TestSuites = () => {
 
   const confirmDelete = () => {
     if (deletingSuite) {
-      toast.success('Test suite deleted');
+      deleteSuite.mutate(deletingSuite.id, {
+        onSuccess: () => toast.success('Test suite deleted'),
+        onError: () => toast.error('Failed to delete test suite'),
+      });
     }
     setDeleteDialogOpen(false);
     setDeletingSuite(null);
@@ -62,9 +72,15 @@ export const TestSuites = () => {
 
   const handleSave = (data: Partial<TestSuite>) => {
     if (editingSuite) {
-      toast.success('Test suite updated');
+      updateSuite.mutate(
+        { id: editingSuite.id, data },
+        { onSuccess: () => toast.success('Test suite updated'), onError: () => toast.error('Failed to update') },
+      );
     } else {
-      toast.success('Test suite created');
+      createSuite.mutate(
+        { ...data, projectId },
+        { onSuccess: () => toast.success('Test suite created'), onError: () => toast.error('Failed to create') },
+      );
     }
   };
 
@@ -86,94 +102,103 @@ export const TestSuites = () => {
             Organize test cases into logical groups
           </p>
         </div>
-        <Button className="gap-2" onClick={handleCreate}>
+        <Button className="gap-2" onClick={handleCreate} disabled={!projectId}>
           <Plus className="h-4 w-4" />
           New Suite
         </Button>
       </div>
 
+      {!projectId && (
+        <Card className="flex flex-col items-center justify-center py-8">
+          <FolderTree className="h-10 w-10 text-muted-foreground mb-3" />
+          <p className="text-muted-foreground text-sm">Select a project to view test suites</p>
+        </Card>
+      )}
+
       {/* Suites Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {suites.map((suite) => (
-          <Card 
-            key={suite.id}
-            className={cn(
-              'cursor-pointer transition-all hover:shadow-md',
-              selectedSuite === suite.id && 'ring-2 ring-primary'
-            )}
-            onClick={() => setSelectedSuite(suite.id)}
-          >
-            <CardHeader className="flex flex-row items-start justify-between pb-2">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <FolderTree className="h-5 w-5 text-primary" />
+      {projectId && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {suites.map((suite) => (
+            <Card
+              key={suite.id}
+              className={cn(
+                'cursor-pointer transition-all hover:shadow-md',
+                selectedSuite === suite.id && 'ring-2 ring-primary'
+              )}
+              onClick={() => setSelectedSuite(suite.id)}
+            >
+              <CardHeader className="flex flex-row items-start justify-between pb-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <FolderTree className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base">{suite.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {suite.testCasesCount ?? 0} test cases
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <CardTitle className="text-base">{suite.name}</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {suite.testCasesCount} test cases
-                  </p>
-                </div>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8"
-                    onClick={(e) => e.stopPropagation()}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleView(suite)}>
+                      <ChevronRight className="mr-2 h-4 w-4" />
+                      View Details
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleEdit(suite)}>
+                      <Pencil className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => handleDelete(suite)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground line-clamp-2">
+                  {suite.description}
+                </p>
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <TestTube2 className="h-4 w-4" />
+                    <span>{suite.testCasesCount ?? 0} cases</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleView(suite);
+                    }}
                   >
-                    <MoreHorizontal className="h-4 w-4" />
+                    View
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleView(suite)}>
-                    <ChevronRight className="mr-2 h-4 w-4" />
-                    View Details
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleEdit(suite)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    className="text-destructive"
-                    onClick={() => handleDelete(suite)}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {suite.description}
-              </p>
-              <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <TestTube2 className="h-4 w-4" />
-                  <span>{suite.testCasesCount} cases</span>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="gap-1"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleView(suite);
-                  }}
-                >
-                  View
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Empty State */}
-      {suites.length === 0 && (
+      {projectId && suites.length === 0 && (
         <Card className="flex flex-col items-center justify-center py-12">
           <FolderTree className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium">No test suites yet</h3>

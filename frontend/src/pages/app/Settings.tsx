@@ -25,13 +25,12 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAIConfigStore, AI_PROVIDERS, type AIProvider } from '@/stores/aiConfigStore';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 export const Settings = () => {
   const { theme } = useUIStore();
   const { user } = useAuthStore();
   const { activeProvider, activeModel, apiKeys, setActiveProvider, setActiveModel, setApiKey, isConfigured } = useAIConfigStore();
-  const { toast } = useToast();
   const [showKeys, setShowKeys] = useState<Record<AIProvider, boolean>>({ gemini: false, openai: false, anthropic: false });
   const [editingKey, setEditingKey] = useState<string>('');
 
@@ -45,13 +44,13 @@ export const Settings = () => {
     if (editingKey.trim()) {
       setApiKey(provider, editingKey.trim());
       setEditingKey('');
-      toast({ title: 'API Key saved', description: `${AI_PROVIDERS.find(p => p.provider === provider)?.label} key has been saved securely.` });
+      toast.success('API Key saved', { description: `${AI_PROVIDERS.find(p => p.provider === provider)?.label} key has been saved securely.` });
     }
   };
 
   const handleRemoveKey = (provider: AIProvider) => {
     setApiKey(provider, '');
-    toast({ title: 'API Key removed', description: `${AI_PROVIDERS.find(p => p.provider === provider)?.label} key has been removed.` });
+    toast.success('API Key removed', { description: `${AI_PROVIDERS.find(p => p.provider === provider)?.label} key has been removed.` });
   };
 
   const maskKey = (key: string) => {

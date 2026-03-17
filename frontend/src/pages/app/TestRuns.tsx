@@ -34,7 +34,7 @@ import { TestRunDialog } from '@/components/testruns/TestRunDialog';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { TestRun } from '@/types';
 
 const statusConfig = {
@@ -45,7 +45,6 @@ const statusConfig = {
 
 export const TestRuns = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const { data: testRuns = [], isLoading } = useTestRuns();
   const { data: releases = [] } = useReleases();
   const createTestRun = useCreateTestRun();
@@ -73,9 +72,9 @@ export const TestRuns = () => {
   const handleSave = async (data: Partial<TestRun>) => {
     try {
       await createTestRun.mutateAsync(data);
-      toast({ title: 'Test run created successfully' });
+      toast.success('Test run created successfully');
     } catch (error) {
-      toast({ title: 'Failed to create test run', variant: 'destructive' });
+      toast.error('Failed to create test run');
     }
   };
 
@@ -83,10 +82,10 @@ export const TestRuns = () => {
     if (!selectedRun) return;
     try {
       await deleteTestRun.mutateAsync(selectedRun.id);
-      toast({ title: 'Test run deleted successfully' });
+      toast.success('Test run deleted successfully');
       setDeleteDialogOpen(false);
     } catch (error) {
-      toast({ title: 'Failed to delete test run', variant: 'destructive' });
+      toast.error('Failed to delete test run');
     }
   };
 
@@ -129,7 +128,7 @@ export const TestRuns = () => {
     a.download = `test-run-report-${run.id}-${format(new Date(), 'yyyy-MM-dd')}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: 'Report exported successfully' });
+    toast.success('Report exported successfully');
   };
 
   const getReleaseName = (releaseId?: string) => {

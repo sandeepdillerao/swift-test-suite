@@ -53,10 +53,10 @@ import {
 import { useTestRun, useTestRunHistory, useUpdateTestRun, useUpdateTestRunCase } from '@/hooks/useTestRuns';
 import { useTestCases } from '@/hooks/useTestCases';
 import { useReleases } from '@/hooks/useReleases';
-import { mockUsers } from '@/lib/mock-data';
+import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, format } from 'date-fns';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import type { TestStatus, TestRunCase } from '@/types';
 
 const statusConfig: Record<TestStatus, { label: string; className: string; icon: typeof CheckCircle2 }> = {
@@ -70,11 +70,11 @@ const statusConfig: Record<TestStatus, { label: string; className: string; icon:
 export const TestRunDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  
+  const { user } = useAuthStore();
+
   const { data: testRun, isLoading } = useTestRun(id!);
   const { data: history = [] } = useTestRunHistory(id!);
-  const { data: allTestCases = [] } = useTestCases('1');
+  const { data: allTestCases = [] } = useTestCases();
   const { data: releases = [] } = useReleases();
   const updateTestRun = useUpdateTestRun();
   const updateTestRunCase = useUpdateTestRunCase();
@@ -103,8 +103,6 @@ export const TestRunDetail = () => {
   }
 
   const release = releases.find(r => r.id === testRun.releaseId);
-  const assignee = mockUsers.find(u => u.id === testRun.assignedTo);
-  const creator = mockUsers.find(u => u.id === testRun.createdBy);
 
   // Calculate stats
   const passed = testRun.testCases.filter(tc => tc.status === 'passed').length;
@@ -129,15 +127,11 @@ export const TestRunDetail = () => {
       await updateTestRunCase.mutateAsync({
         runId: testRun.id,
         testCaseId: runCase.testCaseId,
-        data: {
-          status: newStatus,
-          executedBy: '1',
-          executedAt: new Date().toISOString(),
-        },
+        data: { status: newStatus },
       });
-      toast({ title: 'Status updated successfully' });
-    } catch (error) {
-      toast({ title: 'Failed to update status', variant: 'destructive' });
+      toast.success('Status updated');
+    } catch {
+      toast.error('Failed to update status');
     }
   };
 
@@ -150,9 +144,9 @@ export const TestRunDetail = () => {
           completedAt: new Date().toISOString(),
         },
       });
-      toast({ title: 'Test run marked as completed' });
-    } catch (error) {
-      toast({ title: 'Failed to complete test run', variant: 'destructive' });
+      toast.success('Test run marked as completed');
+    } catch {
+      toast.error('Failed to complete test run');
     }
   };
 
@@ -168,7 +162,6 @@ export const TestRunDetail = () => {
         startedAt: testRun.startedAt,
         completedAt: testRun.completedAt,
         release: release ? { name: release.name, version: release.version } : null,
-        assignee: assignee?.name,
       },
       summary: {
         totalCases: total,
@@ -183,11 +176,10 @@ export const TestRunDetail = () => {
       testCases: testRun.testCases.map(tc => {
         const details = getTestCaseDetails(tc.testCaseId);
         return {
-          id: tc.testCaseId,
+          tcId: details?.tcId ?? tc.testCaseId,
           title: details?.title,
           priority: details?.priority,
           status: tc.status,
-          executedBy: mockUsers.find(u => u.id === tc.executedBy)?.name,
           executedAt: tc.executedAt,
           duration: tc.duration,
           comment: tc.comment,
@@ -206,19 +198,18 @@ export const TestRunDetail = () => {
     a.download = `test-run-report-${testRun.id}-${format(new Date(), 'yyyy-MM-dd-HHmm')}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: 'Report exported successfully' });
+    toast.success('Report exported successfully');
   };
 
   const exportCSVReport = () => {
-    const headers = ['Test Case ID', 'Title', 'Priority', 'Status', 'Executed By', 'Executed At', 'Duration (s)', 'Comment', 'Defects'];
+    const headers = ['TC ID', 'Title', 'Priority', 'Status', 'Executed At', 'Duration (s)', 'Comment', 'Defects'];
     const rows = testRun.testCases.map(tc => {
       const details = getTestCaseDetails(tc.testCaseId);
       return [
-        tc.testCaseId,
+        details?.tcId ?? tc.testCaseId,
         details?.title || '',
         details?.priority || '',
         tc.status,
-        mockUsers.find(u => u.id === tc.executedBy)?.name || '',
         tc.executedAt ? format(new Date(tc.executedAt), 'yyyy-MM-dd HH:mm') : '',
         tc.duration?.toString() || '',
         tc.comment || '',
@@ -234,7 +225,7 @@ export const TestRunDetail = () => {
     a.download = `test-run-report-${testRun.id}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: 'CSV report exported successfully' });
+    toast.success('CSV report exported successfully');
   };
 
   return (
@@ -432,11 +423,11 @@ export const TestRunDetail = () => {
                 <code className="text-xs bg-muted px-1 py-0.5 rounded">{testRun.buildNumber}</code>
               </div>
             )}
-            {assignee && (
+            {testRun.assignedTo && (
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Assignee:</span>
-                <span>{assignee.name}</span>
+                <span className="text-muted-foreground">Assigned to:</span>
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">{testRun.assignedTo.slice(0, 8)}</code>
               </div>
             )}
           </CardContent>
@@ -481,7 +472,7 @@ export const TestRunDetail = () => {
               const testCase = getTestCaseDetails(runCase.testCaseId);
               const statusInfo = statusConfig[runCase.status];
               const StatusIcon = statusInfo.icon;
-              const executor = mockUsers.find(u => u.id === runCase.executedBy);
+              const executedBy = runCase.executedBy;
               const isExpanded = expandedCase === runCase.id;
 
               return (
@@ -493,7 +484,9 @@ export const TestRunDetail = () => {
                           <div className={cn('p-1.5 rounded', statusInfo.className.split(' ')[0])}>
                             <StatusIcon className={cn('h-4 w-4', statusInfo.className.split(' ')[1])} />
                           </div>
-                          <span className="text-sm font-mono text-muted-foreground w-20">{runCase.testCaseId}</span>
+                          <span className="text-xs font-mono font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded w-16 text-center">
+                            {testCase?.tcId ?? '—'}
+                          </span>
                           <span className="flex-1 font-medium">{testCase?.title || 'Unknown Test Case'}</span>
                           <Badge variant="outline" className={statusInfo.className}>
                             {statusInfo.label}
@@ -606,10 +599,10 @@ export const TestRunDetail = () => {
                                 </div>
                               </div>
                             )}
-                            {executor && (
+                            {(executedBy || runCase.duration) && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                 <User className="h-4 w-4" />
-                                Executed by {executor.name}
+                                {executedBy && `Executed`}
                                 {runCase.duration && ` • ${runCase.duration}s`}
                               </div>
                             )}
@@ -635,8 +628,7 @@ export const TestRunDetail = () => {
                     </div>
                   ) : (
                     history.map((item) => {
-                      const testCase = getTestCaseDetails(item.testCaseId);
-                      const executor = mockUsers.find(u => u.id === item.executedBy);
+                      const tcDetails = getTestCaseDetails(item.testCaseId);
                       const statusInfo = statusConfig[item.status];
                       const StatusIcon = statusInfo.icon;
 
@@ -646,12 +638,14 @@ export const TestRunDetail = () => {
                             <StatusIcon className={cn('h-4 w-4', statusInfo.className.split(' ')[1])} />
                           </div>
                           <div className="flex-1">
-                            <p className="font-medium">
-                              <span className="font-mono text-muted-foreground">{item.testCaseId}</span>
-                              {' '}{testCase?.title}
+                            <p className="font-medium flex items-center gap-2">
+                              <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                {tcDetails?.tcId ?? '—'}
+                              </span>
+                              {tcDetails?.title ?? item.testCaseId}
                             </p>
                             <p className="text-sm text-muted-foreground">
-                              {executor?.name} • {format(new Date(item.executedAt), 'MMM d, yyyy HH:mm')}
+                              {format(new Date(item.executedAt), 'MMM d, yyyy HH:mm')}
                               {item.duration && ` • ${item.duration}s`}
                             </p>
                             {item.comment && (

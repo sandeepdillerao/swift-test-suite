@@ -4,8 +4,11 @@ import type { TestCase } from '@/types';
 export const testCasesService = {
   list: (params?: { projectId?: string; suiteId?: string }) =>
     httpClient
-      .get<TestCase[]>('/test-cases', { params })
-      .then((r) => r.data),
+      .get<{ data: TestCase[] } | TestCase[]>('/test-cases', { params })
+      .then((r) => {
+        const payload = r.data as any;
+        return (Array.isArray(payload) ? payload : payload.data) as TestCase[];
+      }),
 
   get: (id: string) =>
     httpClient.get<TestCase>(`/test-cases/${id}`).then((r) => r.data),
