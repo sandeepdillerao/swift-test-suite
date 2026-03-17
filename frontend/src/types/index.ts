@@ -8,10 +8,17 @@ export type ReleaseStatus = 'planning' | 'in_progress' | 'released' | 'archived'
 export interface User {
   id: string;
   email: string;
-  name: string;
-  avatar?: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  avatarUrl?: string | null;
   role: 'admin' | 'qa_lead' | 'tester' | 'viewer';
   organizationId: string;
+  isActive: boolean;
+  isEmailVerified: boolean;
+  lastLoginAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Organization {

@@ -1,9 +1,9 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  TestTube2, 
-  FolderTree, 
-  Play, 
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard,
+  TestTube2,
+  FolderTree,
+  Play,
   Settings,
   Menu,
   Bell,
@@ -30,6 +30,8 @@ import {
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
+import { api } from '@/services/api';
+import { toast } from 'sonner';
 
 const navigation = [
   { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
@@ -44,8 +46,25 @@ const navigation = [
 
 export const AppLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
-  const { user } = useAuthStore();
+  const { user, refreshToken, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    try {
+      if (refreshToken) await api.auth.logout(refreshToken);
+    } catch {
+      // proceed with local logout even if API call fails
+    } finally {
+      logout();
+      navigate('/login', { replace: true });
+      toast.success('Logged out successfully');
+    }
+  };
+
+  const initials = user
+    ? `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase()
+    : 'U';
 
   return (
     <div className="min-h-screen bg-background">
@@ -135,11 +154,11 @@ export const AppLayout = () => {
                 <Button variant="ghost" className="gap-2 pl-2 pr-3">
                   <Avatar className="h-7 w-7">
                     <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                      {user?.name?.split(' ').map(n => n[0]).join('') || 'U'}
+                      {initials}
                     </AvatarFallback>
                   </Avatar>
                   <span className="text-sm font-medium hidden sm:inline-block">
-                    {user?.name || 'User'}
+                    {user?.displayName || 'User'}
                   </span>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </Button>
@@ -154,7 +173,7 @@ export const AppLayout = () => {
                   Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">
+                <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out
                 </DropdownMenuItem>

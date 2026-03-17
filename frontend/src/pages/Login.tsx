@@ -1,44 +1,56 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FlaskConical, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/services/api';
-import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/stores/authStore';
+import { Eye, EyeOff, FlaskConical, Lock, Mail } from 'lucide-react';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+
+const DEV_CREDENTIALS = [
+  { label: 'Admin', email: 'admin@testflow.dev', password: 'Admin@1234', variant: 'destructive' as const },
+  { label: 'QA Lead', email: 'qalead@testflow.dev', password: 'QaLead@1234', variant: 'default' as const },
+  { label: 'Tester', email: 'tester@testflow.dev', password: 'Tester@1234', variant: 'secondary' as const },
+  { label: 'Viewer', email: 'viewer@testflow.dev', password: 'Viewer@1234', variant: 'outline' as const },
+];
 
 export const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuthStore();
-  const { toast } = useToast();
-  const [email, setEmail] = useState('john@testflow.io');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/app';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const user = await api.auth.login(email, password);
-      login(user);
-      toast({
-        title: 'Welcome back!',
-        description: `Logged in as ${user.name}`,
+      const { accessToken, refreshToken, user } = await api.auth.login(email, password);
+      login(user, accessToken, refreshToken);
+      toast.success(`Welcome back, ${user.displayName}!`, {
+        description: `Signed in as ${user.role.replace('_', ' ')}`,
       });
-      navigate('/app');
+      navigate(from, { replace: true });
     } catch (error) {
-      toast({
-        title: 'Login failed',
-        description: 'Invalid email or password',
-        variant: 'destructive',
+      toast.error('Login failed', {
+        description: error instanceof Error ? error.message : 'Invalid email or password',
       });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fillCredentials = (cred: typeof DEV_CREDENTIALS[number]) => {
+    setEmail(cred.email);
+    setPassword(cred.password);
   };
 
   return (
@@ -51,11 +63,26 @@ export const Login = () => {
             </div>
           </div>
           <CardTitle className="text-2xl">Welcome to TestFlow</CardTitle>
-          <CardDescription>
-            Sign in to your account to continue
-          </CardDescription>
+          <CardDescription>Sign in to your account to continue</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Dev quick-select */}
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
+            <p className="text-xs text-muted-foreground font-medium">Quick login (dev seed users)</p>
+            <div className="flex flex-wrap gap-2">
+              {DEV_CREDENTIALS.map((cred) => (
+                <Badge
+                  key={cred.label}
+                  variant={cred.variant}
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => fillCredentials(cred)}
+                >
+                  {cred.label}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -72,6 +99,7 @@ export const Login = () => {
                 />
               </div>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
@@ -92,21 +120,17 @@ export const Login = () => {
                   className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-muted-foreground" />
-                  )}
+                  {showPassword
+                    ? <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    : <Eye className="h-4 w-4 text-muted-foreground" />}
                 </Button>
               </div>
             </div>
+
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
           </form>
-          <p className="text-center text-sm text-muted-foreground mt-4">
-            Demo: Use any email from mock data
-          </p>
         </CardContent>
       </Card>
     </div>
