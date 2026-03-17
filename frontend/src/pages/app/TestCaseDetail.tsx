@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Pencil, 
-  Trash2, 
-  Clock, 
-  User, 
+import {
+  ArrowLeft,
+  Pencil,
+  Trash2,
+  Clock,
+  User,
   FolderTree,
   CheckCircle2,
   XCircle,
@@ -19,8 +20,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
-import { useTestCase } from '@/hooks/useTestCases';
+import { TestCaseDialog } from '@/components/testcases/TestCaseDialog';
+import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
+import { useTestCase, useUpdateTestCase, useDeleteTestCase } from '@/hooks/useTestCases';
+import { useTestSuites } from '@/hooks/useTestSuites';
+import { useProjectStore } from '@/stores/projectStore';
 import { formatDistanceToNow, format } from 'date-fns';
+import { toast } from 'sonner';
+import type { TestCase } from '@/types';
 
 const statusIcons = {
   passed: CheckCircle2,
@@ -33,7 +40,16 @@ const statusIcons = {
 export const TestCaseDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id;
+
   const { data: testCase, isLoading } = useTestCase(id || '');
+  const { data: suites = [] } = useTestSuites(projectId ?? '');
+  const updateTestCase = useUpdateTestCase();
+  const deleteTestCase = useDeleteTestCase();
+
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -56,6 +72,27 @@ export const TestCaseDetail = () => {
   }
 
   const StatusIcon = statusIcons[testCase.status];
+  const suiteName = suites.find((s) => s.id === testCase.suiteId)?.name ?? '—';
+
+  const handleSave = (data: Partial<TestCase>) => {
+    updateTestCase.mutate(
+      { id: testCase.id, data },
+      {
+        onSuccess: () => { toast.success('Test case updated'); setEditDialogOpen(false); },
+        onError: () => toast.error('Failed to update test case'),
+      }
+    );
+  };
+
+  const confirmDelete = () => {
+    deleteTestCase.mutate(testCase.id, {
+      onSuccess: () => {
+        toast.success('Test case deleted');
+        navigate('/app/test-cases');
+      },
+      onError: () => toast.error('Failed to delete test case'),
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -81,11 +118,16 @@ export const TestCaseDetail = () => {
           <h1 className="text-2xl font-semibold tracking-tight">{testCase.title}</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
             <Pencil className="h-4 w-4 mr-2" />
             Edit
           </Button>
-          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
@@ -195,7 +237,7 @@ export const TestCaseDetail = () => {
                   <FolderTree className="h-3 w-3" />
                   Suite
                 </span>
-                <span className="text-sm">Authentication</span>
+                <span className="text-sm font-medium">{suiteName}</span>
               </div>
             </CardContent>
           </Card>
@@ -253,6 +295,7 @@ export const TestCaseDetail = () => {
               )}
             </CardContent>
           </Card>
+
           {/* Tags */}
           <Card>
             <CardHeader>
@@ -313,7 +356,7 @@ export const TestCaseDetail = () => {
                   <User className="h-4 w-4 mt-0.5 text-muted-foreground" />
                   <div>
                     <p className="text-sm">Assigned To</p>
-                    <p className="text-xs text-muted-foreground">Bob Wilson</p>
+                    <p className="text-xs text-muted-foreground">{testCase.assignedTo}</p>
                   </div>
                 </div>
               )}
@@ -321,6 +364,24 @@ export const TestCaseDetail = () => {
           </Card>
         </div>
       </div>
+
+      {/* Edit Dialog */}
+      <TestCaseDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        testCase={testCase}
+        suites={suites.map((s) => ({ id: s.id, name: s.name }))}
+        onSave={handleSave}
+      />
+
+      {/* Delete Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Test Case"
+        description={`Are you sure you want to delete "${testCase.title}"? This action cannot be undone.`}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

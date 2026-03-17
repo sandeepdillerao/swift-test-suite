@@ -6,6 +6,7 @@ export const useTestCases = (projectId?: string, suiteId?: string) => {
   return useQuery({
     queryKey: ['testCases', { projectId, suiteId }],
     queryFn: () => api.testCases.list(projectId, suiteId),
+    enabled: !!projectId || !!suiteId,
   });
 };
 

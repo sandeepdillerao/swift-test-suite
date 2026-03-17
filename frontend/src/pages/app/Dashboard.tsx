@@ -16,13 +16,16 @@ import {
 } from 'lucide-react';
 import { useDashboardStats } from '@/hooks/useDashboard';
 import { useTestRuns } from '@/hooks/useTestRuns';
+import { useProjectStore } from '@/stores/projectStore';
 import { StatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 
 export const Dashboard = () => {
-  const { data: stats, isLoading } = useDashboardStats();
-  const { data: testRuns } = useTestRuns();
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id;
+  const { data: stats, isLoading } = useDashboardStats(projectId);
+  const { data: testRuns } = useTestRuns(projectId);
 
   if (isLoading) {
     return (

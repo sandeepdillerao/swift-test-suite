@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useReleases, useCreateRelease, useDeleteRelease } from '@/hooks/useReleases';
 import { useTestRuns } from '@/hooks/useTestRuns';
+import { useProjectStore } from '@/stores/projectStore';
 import { ReleaseDialog } from '@/components/releases/ReleaseDialog';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
 import { cn } from '@/lib/utils';
@@ -43,8 +44,10 @@ const statusConfig: Record<ReleaseStatus, { label: string; className: string; ic
 
 export const Releases = () => {
   const navigate = useNavigate();
-  const { data: releases = [], isLoading } = useReleases();
-  const { data: testRuns = [] } = useTestRuns();
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id;
+  const { data: releases = [], isLoading } = useReleases(projectId);
+  const { data: testRuns = [] } = useTestRuns(projectId);
   const createRelease = useCreateRelease();
   const deleteRelease = useDeleteRelease();
   

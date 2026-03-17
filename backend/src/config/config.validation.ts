@@ -28,4 +28,5 @@ export const configValidationSchema = Joi.object({
   BCRYPT_ROUNDS: Joi.number().min(10).max(14).default(12),
   FRONTEND_URL: Joi.string().default('http://localhost:5173'),
   SWAGGER_ENABLED: Joi.boolean().default(true),
+  SETTINGS_ENCRYPTION_KEY: Joi.string().min(32).default('change-me-in-production-32-chars!!'),
 });

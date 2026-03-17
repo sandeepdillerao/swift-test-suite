@@ -20,6 +20,7 @@ import { Releases } from "@/pages/app/Releases";
 import { Integrations } from "@/pages/app/Integrations";
 import { UserManagement } from "@/pages/app/UserManagement";
 import { Settings } from "@/pages/app/Settings";
+import { Projects } from "@/pages/app/Projects";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppLayout />}>
                 <Route index element={<Dashboard />} />
+                <Route path="projects" element={<Projects />} />
                 <Route path="test-cases" element={<TestCases />} />
                 <Route path="test-cases/:id" element={<TestCaseDetail />} />
                 <Route path="test-suites" element={<TestSuites />} />

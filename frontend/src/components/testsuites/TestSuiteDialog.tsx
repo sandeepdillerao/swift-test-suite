@@ -82,7 +82,6 @@ export const TestSuiteDialog = ({
   const onSubmit = (data: TestSuiteFormData) => {
     onSave({
       ...data,
-      projectId: '1',
       parentId: data.parentId === '__none__' ? undefined : data.parentId || undefined,
     });
     onOpenChange(false);

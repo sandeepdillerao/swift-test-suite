@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useTestRuns, useCreateTestRun, useDeleteTestRun } from '@/hooks/useTestRuns';
 import { useReleases } from '@/hooks/useReleases';
+import { useProjectStore } from '@/stores/projectStore';
 import { TestRunDialog } from '@/components/testruns/TestRunDialog';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
 import { cn } from '@/lib/utils';
@@ -45,8 +46,10 @@ const statusConfig = {
 
 export const TestRuns = () => {
   const navigate = useNavigate();
-  const { data: testRuns = [], isLoading } = useTestRuns();
-  const { data: releases = [] } = useReleases();
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id;
+  const { data: testRuns = [], isLoading } = useTestRuns(projectId);
+  const { data: releases = [] } = useReleases(projectId);
   const createTestRun = useCreateTestRun();
   const deleteTestRun = useDeleteTestRun();
   

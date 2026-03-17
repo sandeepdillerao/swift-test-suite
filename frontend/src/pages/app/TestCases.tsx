@@ -95,7 +95,7 @@ export const TestCases = () => {
     if (editingTestCase) {
       updateTestCase.mutate({ id: editingTestCase.id, data }, { onSuccess: () => toast.success('Test case updated') });
     } else {
-      createTestCase.mutate(data, { onSuccess: () => toast.success('Test case created') });
+      createTestCase.mutate({ ...data, projectId }, { onSuccess: () => toast.success('Test case created') });
     }
   };
 

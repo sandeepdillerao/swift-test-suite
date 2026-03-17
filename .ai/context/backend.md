@@ -111,6 +111,7 @@ Every endpoint:
 ---
 
 ## Config Pattern
+whenever you find some configrable variable take ti from env file.
 All config via `@nestjs/config` with `registerAs`:
 ```ts
 // config/app.config.ts

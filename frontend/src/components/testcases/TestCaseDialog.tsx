@@ -132,7 +132,6 @@ export const TestCaseDialog = ({
       ...data,
       tags,
       steps,
-      projectId: '1',
     });
     onOpenChange(false);
   };

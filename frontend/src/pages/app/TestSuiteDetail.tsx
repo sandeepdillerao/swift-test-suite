@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Pencil, 
-  Trash2, 
+import {
+  ArrowLeft,
+  Pencil,
+  Trash2,
   Plus,
   TestTube2,
   FolderTree,
@@ -10,17 +11,34 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
-import { useTestSuite } from '@/hooks/useTestSuites';
-import { useTestCases } from '@/hooks/useTestCases';
+import { TestSuiteDialog } from '@/components/testsuites/TestSuiteDialog';
+import { TestCaseDialog } from '@/components/testcases/TestCaseDialog';
+import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
+import { useTestSuite, useTestSuites, useUpdateTestSuite, useDeleteTestSuite } from '@/hooks/useTestSuites';
+import { useTestCases, useCreateTestCase } from '@/hooks/useTestCases';
+import { useProjectStore } from '@/stores/projectStore';
+import type { TestSuite, TestCase } from '@/types';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 export const TestSuiteDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id;
+
   const { data: suite, isLoading: suiteLoading } = useTestSuite(id || '');
   const { data: testCases = [], isLoading: casesLoading } = useTestCases(undefined, id);
+  const { data: allSuites = [] } = useTestSuites(projectId ?? '');
+
+  const updateSuite = useUpdateTestSuite();
+  const deleteSuite = useDeleteTestSuite();
+  const createTestCase = useCreateTestCase();
+
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [addCaseDialogOpen, setAddCaseDialogOpen] = useState(false);
 
   const isLoading = suiteLoading || casesLoading;
 
@@ -52,6 +70,36 @@ export const TestSuiteDetail = () => {
     {} as Record<string, number>
   );
 
+  const handleSaveSuite = (data: Partial<TestSuite>) => {
+    updateSuite.mutate(
+      { id: suite.id, data },
+      {
+        onSuccess: () => { toast.success('Test suite updated'); setEditDialogOpen(false); },
+        onError: () => toast.error('Failed to update test suite'),
+      }
+    );
+  };
+
+  const confirmDeleteSuite = () => {
+    deleteSuite.mutate(suite.id, {
+      onSuccess: () => {
+        toast.success('Test suite deleted');
+        navigate('/app/test-suites');
+      },
+      onError: () => toast.error('Failed to delete test suite'),
+    });
+  };
+
+  const handleSaveTestCase = (data: Partial<TestCase>) => {
+    createTestCase.mutate(
+      { ...data, suiteId: suite.id, projectId },
+      {
+        onSuccess: () => { toast.success('Test case created'); setAddCaseDialogOpen(false); },
+        onError: () => toast.error('Failed to create test case'),
+      }
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -77,11 +125,16 @@ export const TestSuiteDetail = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
             <Pencil className="h-4 w-4 mr-2" />
             Edit
           </Button>
-          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
@@ -106,8 +159,8 @@ export const TestSuiteDetail = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-success/10">
-                <TestTube2 className="h-5 w-5 text-success" />
+              <div className="p-2 rounded-lg bg-green-500/10">
+                <TestTube2 className="h-5 w-5 text-green-600" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{statusCounts.passed || 0}</p>
@@ -132,8 +185,8 @@ export const TestSuiteDetail = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-warning/10">
-                <TestTube2 className="h-5 w-5 text-warning" />
+              <div className="p-2 rounded-lg bg-orange-500/10">
+                <TestTube2 className="h-5 w-5 text-orange-500" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{statusCounts.blocked || 0}</p>
@@ -148,7 +201,7 @@ export const TestSuiteDetail = () => {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Test Cases in this Suite</CardTitle>
-          <Button size="sm" className="gap-2">
+          <Button size="sm" className="gap-2" onClick={() => setAddCaseDialogOpen(true)}>
             <Plus className="h-4 w-4" />
             Add Test Case
           </Button>
@@ -158,7 +211,7 @@ export const TestSuiteDetail = () => {
             <div className="text-center py-8 text-muted-foreground">
               <TestTube2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No test cases in this suite yet</p>
-              <Button className="mt-4 gap-2" variant="outline">
+              <Button className="mt-4 gap-2" variant="outline" onClick={() => setAddCaseDialogOpen(true)}>
                 <Plus className="h-4 w-4" />
                 Create First Test Case
               </Button>
@@ -172,8 +225,8 @@ export const TestSuiteDetail = () => {
                   onClick={() => navigate(`/app/test-cases/${tc.id}`)}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs text-muted-foreground w-16">
-                      {tc.id}
+                    <span className="font-mono text-xs font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                      {tc.tcId}
                     </span>
                     <div>
                       <p className="font-medium text-sm">{tc.title}</p>
@@ -205,6 +258,33 @@ export const TestSuiteDetail = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Suite Dialog */}
+      <TestSuiteDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        suite={suite}
+        suites={allSuites}
+        onSave={handleSaveSuite}
+      />
+
+      {/* Delete Suite Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Test Suite"
+        description={`Are you sure you want to delete "${suite.name}"? This will not delete the test cases in this suite.`}
+        onConfirm={confirmDeleteSuite}
+      />
+
+      {/* Add Test Case Dialog */}
+      <TestCaseDialog
+        open={addCaseDialogOpen}
+        onOpenChange={setAddCaseDialogOpen}
+        testCase={null}
+        suites={[{ id: suite.id, name: suite.name }]}
+        onSave={handleSaveTestCase}
+      />
     </div>
   );
 };

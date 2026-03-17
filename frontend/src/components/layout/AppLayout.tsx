@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   TestTube2,
   FolderTree,
+  FolderKanban,
   Play,
   Settings,
   Menu,
@@ -30,11 +32,14 @@ import {
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { useProjects } from '@/hooks/useProjects';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 
 const navigation = [
   { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
+  { name: 'Projects', href: '/app/projects', icon: FolderKanban },
   { name: 'Test Cases', href: '/app/test-cases', icon: TestTube2 },
   { name: 'Test Suites', href: '/app/test-suites', icon: FolderTree },
   { name: 'Test Runs', href: '/app/test-runs', icon: Play },
@@ -49,6 +54,26 @@ export const AppLayout = () => {
   const navigate = useNavigate();
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
   const { user, refreshToken, logout } = useAuthStore();
+  const { currentProject, setCurrentProject } = useProjectStore();
+  const { data: projects = [] } = useProjects();
+
+  // Auto-select first active project when none is persisted or the persisted one was deleted
+  useEffect(() => {
+    if (projects.length === 0) return;
+    const activeProjects = projects.filter((p) => !p.isArchived);
+    if (!currentProject) {
+      setCurrentProject(activeProjects[0] ?? projects[0]);
+    } else {
+      // Re-sync: replace with fresh data in case name/key changed
+      const fresh = projects.find((p) => p.id === currentProject.id);
+      if (!fresh) {
+        // Previously selected project was deleted — fall back to first
+        setCurrentProject(activeProjects[0] ?? projects[0]);
+      } else if (fresh !== currentProject) {
+        setCurrentProject(fresh);
+      }
+    }
+  }, [projects]);
 
   const handleLogout = async () => {
     try {
@@ -86,7 +111,7 @@ export const AppLayout = () => {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 p-2 mt-2">
+        <nav className="flex-1 space-y-1 p-2 mt-2 pb-16">
           {navigation.map((item) => {
             const isActive = location.pathname === item.href || 
               (item.href !== '/app' && location.pathname.startsWith(item.href));
@@ -109,6 +134,27 @@ export const AppLayout = () => {
             );
           })}
         </nav>
+
+        {/* Current Project Indicator */}
+        <div className="absolute bottom-0 left-0 right-0 p-2 border-t border-border">
+          {!sidebarCollapsed ? (
+            <NavLink to="/app/projects" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-muted transition-colors group">
+              <div className={cn('h-6 w-6 rounded flex items-center justify-center text-white text-xs font-bold flex-shrink-0', currentProject ? 'bg-primary' : 'bg-muted-foreground/30')}>
+                {currentProject ? currentProject.key.slice(0, 2) : '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{currentProject?.name ?? 'No project selected'}</p>
+                <p className="text-xs text-muted-foreground">{currentProject ? currentProject.key : 'Click to select'}</p>
+              </div>
+            </NavLink>
+          ) : (
+            <NavLink to="/app/projects" className="flex justify-center py-2">
+              <div className={cn('h-6 w-6 rounded flex items-center justify-center text-white text-xs font-bold', currentProject ? 'bg-primary' : 'bg-muted-foreground/30')}>
+                {currentProject ? currentProject.key.slice(0, 2) : '?'}
+              </div>
+            </NavLink>
+          )}
+        </div>
       </aside>
 
       {/* Main Content */}
@@ -139,6 +185,38 @@ export const AppLayout = () => {
                 className="pl-9 bg-muted/50 border-0"
               />
             </div>
+          </div>
+
+          {/* Project selector */}
+          <div className="w-64">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between">
+                  <span className="truncate">
+                    {currentProject?.name || 'Select project'}
+                  </span>
+                  <ChevronDown className="h-4 w-4 ml-2 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 max-h-80 overflow-y-auto">
+                {projects.length === 0 && (
+                  <DropdownMenuItem disabled>No projects available</DropdownMenuItem>
+                )}
+                {projects.map((project) => (
+                  <DropdownMenuItem
+                    key={project.id}
+                    onClick={() => setCurrentProject(project)}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium truncate">{project.name}</span>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {project.description}
+                      </span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div className="flex items-center gap-2 ml-auto">

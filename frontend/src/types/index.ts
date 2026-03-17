@@ -31,12 +31,14 @@ export interface Organization {
 export interface Project {
   id: string;
   name: string;
-  description: string;
+  description: string | null;
+  key: string;
   organizationId: string;
+  isArchived: boolean;
+  createdBy: string;
+  settings: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
-  testCasesCount: number;
-  passRate: number;
 }
 
 export interface TestSuite {

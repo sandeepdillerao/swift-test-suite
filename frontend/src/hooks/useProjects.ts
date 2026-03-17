@@ -19,11 +19,25 @@ export const useProject = (id: string) => {
 
 export const useCreateProject = () => {
   const queryClient = useQueryClient();
-  
   return useMutation({
     mutationFn: (data: Partial<Project>) => api.projects.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+  });
+};
+
+export const useUpdateProject = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Project> }) =>
+      api.projects.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
+  });
+};
+
+export const useDeleteProject = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.projects.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   });
 };

@@ -17,6 +17,7 @@ import { testCasesService } from './modules/test-cases.service';
 import { testRunsService } from './modules/test-runs.service';
 import { releasesService } from './modules/releases.service';
 import { dashboardService } from './modules/dashboard.service';
+import { settingsService } from './modules/settings.service';
 import type { Project, TestCase, TestRun, TestRunCase, Release } from '@/types';
 
 export const api = {
@@ -94,6 +95,17 @@ export const api = {
     getStats: (projectId?: string) => dashboardService.getStats({ projectId }),
   },
 
+  // ── Settings ──────────────────────────────────────────────────────────────────
+  settings: {
+    getAll: () => settingsService.getAll(),
+    updateNotifications: settingsService.updateNotifications,
+    updateAi: settingsService.updateAi,
+    updateOrganization: settingsService.updateOrganization,
+    getApiKeys: () => settingsService.getApiKeys(),
+    setApiKey: (provider: string, apiKey: string) => settingsService.setApiKey(provider, apiKey),
+    deleteApiKey: (provider: string) => settingsService.deleteApiKey(provider),
+  },
+
   // ── Users ─────────────────────────────────────────────────────────────────────
   users: {
     list: (params?: Parameters<typeof usersService.list>[0]) => usersService.list(params),
@@ -119,5 +131,6 @@ export { testCasesService } from './modules/test-cases.service';
 export { testRunsService } from './modules/test-runs.service';
 export { releasesService } from './modules/releases.service';
 export { dashboardService } from './modules/dashboard.service';
+export { settingsService } from './modules/settings.service';
 export { httpClient } from './http-client';
 export type { ApiError } from './http-client';

@@ -32,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import type { TestRun, TestCase, Release, User, TestRunCase } from '@/types';
 import { useTestCases } from '@/hooks/useTestCases';
 import { useReleases } from '@/hooks/useReleases';
+import { useProjectStore } from '@/stores/projectStore';
 import { mockUsers } from '@/lib/mock-data';
 
 const formSchema = z.object({
@@ -54,8 +55,10 @@ interface TestRunDialogProps {
 }
 
 export const TestRunDialog = ({ open, onOpenChange, testRun, onSave }: TestRunDialogProps) => {
-  const { data: testCases = [] } = useTestCases('1');
-  const { data: releases = [] } = useReleases('1');
+  const { currentProject } = useProjectStore();
+  const projectId = currentProject?.id;
+  const { data: testCases = [] } = useTestCases(projectId);
+  const { data: releases = [] } = useReleases(projectId);
   const [selectedCases, setSelectedCases] = useState<string[]>([]);
   
   const form = useForm<FormData>({
@@ -127,9 +130,13 @@ export const TestRunDialog = ({ open, onOpenChange, testRun, onSave }: TestRunDi
       status: 'not_run' as const,
     }));
 
+    if (!projectId) {
+      return;
+    }
+
     onSave({
       ...data,
-      projectId: '1',
+      projectId,
       releaseId: data.releaseId === '__none__' ? undefined : data.releaseId,
       assignedTo: data.assignedTo === '__none__' ? undefined : data.assignedTo,
       testCases: testRunCases,

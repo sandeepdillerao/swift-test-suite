@@ -21,6 +21,7 @@ import { TestCasesModule } from './modules/test-cases/test-cases.module';
 import { TestRunsModule } from './modules/test-runs/test-runs.module';
 import { ReleasesModule } from './modules/releases/releases.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     TestRunsModule,
     ReleasesModule,
     DashboardModule,
+    SettingsModule,
   ],
   providers: [
     {
