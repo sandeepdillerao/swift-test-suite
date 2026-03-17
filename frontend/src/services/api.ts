@@ -1,229 +1,123 @@
-import { 
-  mockUsers, mockProjects, mockTestSuites, mockTestCases, 
-  mockTestRuns, mockTestRunCases, mockTestRunHistory, mockReleases,
-  mockDashboardStats, mockOrganization, delay 
-} from '@/lib/mock-data';
-import type { 
-  User, Project, TestSuite, TestCase, TestRun, TestRunCase, 
-  TestRunHistory, Release, DashboardStats, Organization 
-} from '@/types';
+/**
+ * api — single import point used by all hooks.
+ *
+ * Each namespace delegates to its dedicated service module which calls the
+ * real backend via the shared httpClient (JWT interceptor, token refresh,
+ * envelope unwrapping, RFC 7807 error surfacing).
+ *
+ * Hook files don't need to change — they still do `import { api } from '@/services/api'`.
+ */
 
-// Simulated API delay (ms)
-const API_DELAY = 300;
+import { authService } from './modules/auth.service';
+import { usersService } from './modules/users.service';
+import { organizationsService } from './modules/organizations.service';
+import { projectsService } from './modules/projects.service';
+import { testSuitesService } from './modules/test-suites.service';
+import { testCasesService } from './modules/test-cases.service';
+import { testRunsService } from './modules/test-runs.service';
+import { releasesService } from './modules/releases.service';
+import { dashboardService } from './modules/dashboard.service';
+import type { Project, TestCase, TestRun, TestRunCase, Release } from '@/types';
 
-// API Service with mock implementations
 export const api = {
-  // Auth
+  // ── Auth ────────────────────────────────────────────────────────────────────
   auth: {
-    login: async (email: string, password: string): Promise<User> => {
-      await delay(API_DELAY);
-      const user = mockUsers.find(u => u.email === email);
-      if (!user) throw new Error('Invalid credentials');
-      return user;
-    },
-    logout: async (): Promise<void> => {
-      await delay(API_DELAY);
-    },
-    getCurrentUser: async (): Promise<User | null> => {
-      await delay(API_DELAY);
-      return mockUsers[0]; // Return first user as logged in
-    },
+    login: (email: string, password: string) => authService.login(email, password),
+    logout: (refreshToken: string) => authService.logout(refreshToken),
+    getCurrentUser: () => authService.me(),
+    register: authService.register,
+    refresh: authService.refresh,
+    forgotPassword: authService.forgotPassword,
+    resetPassword: authService.resetPassword,
+    verifyEmail: authService.verifyEmail,
   },
 
-  // Organization
+  // ── Organization ─────────────────────────────────────────────────────────────
   organization: {
-    get: async (): Promise<Organization> => {
-      await delay(API_DELAY);
-      return mockOrganization;
-    },
+    get: () => organizationsService.getMy(),
+    update: organizationsService.updateMy,
+    getMembers: organizationsService.getMembers,
+    getStats: organizationsService.getStats,
   },
 
-  // Projects
+  // ── Projects ─────────────────────────────────────────────────────────────────
   projects: {
-    list: async (): Promise<Project[]> => {
-      await delay(API_DELAY);
-      return mockProjects;
-    },
-    get: async (id: string): Promise<Project | undefined> => {
-      await delay(API_DELAY);
-      return mockProjects.find(p => p.id === id);
-    },
-    create: async (data: Partial<Project>): Promise<Project> => {
-      await delay(API_DELAY);
-      const newProject: Project = {
-        id: String(mockProjects.length + 1),
-        name: data.name || 'New Project',
-        description: data.description || '',
-        organizationId: '1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        testCasesCount: 0,
-        passRate: 0,
-      };
-      return newProject;
-    },
+    list: () => projectsService.list(),
+    get: (id: string) => projectsService.get(id),
+    create: (data: Partial<Project>) => projectsService.create(data),
+    update: (id: string, data: Partial<Project>) => projectsService.update(id, data),
+    delete: (id: string) => projectsService.delete(id),
   },
 
-  // Test Suites
+  // ── Test Suites ───────────────────────────────────────────────────────────────
   testSuites: {
-    list: async (projectId: string): Promise<TestSuite[]> => {
-      await delay(API_DELAY);
-      return mockTestSuites.filter(s => s.projectId === projectId);
-    },
-    get: async (id: string): Promise<TestSuite | undefined> => {
-      await delay(API_DELAY);
-      return mockTestSuites.find(s => s.id === id);
-    },
+    list: (projectId: string) => testSuitesService.list(projectId),
+    get: (id: string) => testSuitesService.get(id),
+    create: testSuitesService.create,
+    update: testSuitesService.update,
+    delete: testSuitesService.delete,
   },
 
-  // Test Cases
+  // ── Test Cases ────────────────────────────────────────────────────────────────
   testCases: {
-    list: async (projectId?: string, suiteId?: string): Promise<TestCase[]> => {
-      await delay(API_DELAY);
-      let cases = [...mockTestCases];
-      if (projectId) cases = cases.filter(tc => tc.projectId === projectId);
-      if (suiteId) cases = cases.filter(tc => tc.suiteId === suiteId);
-      return cases;
-    },
-    get: async (id: string): Promise<TestCase | undefined> => {
-      await delay(API_DELAY);
-      return mockTestCases.find(tc => tc.id === id);
-    },
-    create: async (data: Partial<TestCase>): Promise<TestCase> => {
-      await delay(API_DELAY);
-      const newCase: TestCase = {
-        id: `TC-${String(mockTestCases.length + 1).padStart(3, '0')}`,
-        title: data.title || 'New Test Case',
-        description: data.description || '',
-        steps: data.steps || [],
-        expectedResult: data.expectedResult || '',
-        priority: data.priority || 'medium',
-        type: data.type || 'manual',
-        status: 'not_run',
-        suiteId: data.suiteId || '1',
-        projectId: data.projectId || '1',
-        tags: data.tags || [],
-        createdBy: '1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      return newCase;
-    },
-    update: async (id: string, data: Partial<TestCase>): Promise<TestCase> => {
-      await delay(API_DELAY);
-      const existing = mockTestCases.find(tc => tc.id === id);
-      if (!existing) throw new Error('Test case not found');
-      return { ...existing, ...data, updatedAt: new Date().toISOString() };
-    },
-    delete: async (id: string): Promise<void> => {
-      await delay(API_DELAY);
-    },
+    list: (projectId?: string, suiteId?: string) =>
+      testCasesService.list({ projectId, suiteId }),
+    get: (id: string) => testCasesService.get(id),
+    create: (data: Partial<TestCase>) => testCasesService.create(data),
+    update: (id: string, data: Partial<TestCase>) => testCasesService.update(id, data),
+    delete: (id: string) => testCasesService.delete(id),
   },
 
-  // Test Runs
+  // ── Test Runs ─────────────────────────────────────────────────────────────────
   testRuns: {
-    list: async (projectId?: string): Promise<TestRun[]> => {
-      await delay(API_DELAY);
-      if (projectId) return mockTestRuns.filter(r => r.projectId === projectId);
-      return mockTestRuns;
-    },
-    get: async (id: string): Promise<TestRun | undefined> => {
-      await delay(API_DELAY);
-      return mockTestRuns.find(r => r.id === id);
-    },
-    create: async (data: Partial<TestRun>): Promise<TestRun> => {
-      await delay(API_DELAY);
-      const selectedCases = data.testCases || [];
-      const newRun: TestRun = {
-        id: String(mockTestRuns.length + 1),
-        name: data.name || 'New Test Run',
-        description: data.description,
-        projectId: data.projectId || '1',
-        releaseId: data.releaseId,
-        status: 'active',
-        testCases: selectedCases,
-        createdBy: '1',
-        assignedTo: data.assignedTo,
-        startedAt: new Date().toISOString(),
-        passRate: 0,
-        environment: data.environment,
-        buildNumber: data.buildNumber,
-      };
-      return newRun;
-    },
-    update: async (id: string, data: Partial<TestRun>): Promise<TestRun> => {
-      await delay(API_DELAY);
-      const existing = mockTestRuns.find(r => r.id === id);
-      if (!existing) throw new Error('Test run not found');
-      return { ...existing, ...data };
-    },
-    delete: async (id: string): Promise<void> => {
-      await delay(API_DELAY);
-    },
-    getHistory: async (runId: string): Promise<TestRunHistory[]> => {
-      await delay(API_DELAY);
-      return mockTestRunHistory.filter(h => h.testRunId === runId);
-    },
-    updateTestCase: async (runId: string, testCaseId: string, data: Partial<TestRunCase>): Promise<TestRunCase> => {
-      await delay(API_DELAY);
-      const existing = mockTestRunCases.find(tc => tc.testRunId === runId && tc.testCaseId === testCaseId);
-      if (!existing) throw new Error('Test run case not found');
-      return { ...existing, ...data };
-    },
+    list: (projectId?: string) => testRunsService.list({ projectId }),
+    get: (id: string) => testRunsService.get(id),
+    create: (data: Partial<TestRun>) => testRunsService.create(data),
+    update: (id: string, data: Partial<TestRun>) => testRunsService.update(id, data),
+    delete: (id: string) => testRunsService.delete(id),
+    getHistory: (runId: string) => testRunsService.getHistory(runId),
+    updateTestCase: (runId: string, testCaseId: string, data: Partial<TestRunCase>) =>
+      testRunsService.updateTestCase(runId, testCaseId, data),
   },
 
-  // Releases
+  // ── Releases ──────────────────────────────────────────────────────────────────
   releases: {
-    list: async (projectId?: string): Promise<Release[]> => {
-      await delay(API_DELAY);
-      if (projectId) return mockReleases.filter(r => r.projectId === projectId);
-      return mockReleases;
-    },
-    get: async (id: string): Promise<Release | undefined> => {
-      await delay(API_DELAY);
-      return mockReleases.find(r => r.id === id);
-    },
-    create: async (data: Partial<Release>): Promise<Release> => {
-      await delay(API_DELAY);
-      const newRelease: Release = {
-        id: String(mockReleases.length + 1),
-        name: data.name || 'New Release',
-        version: data.version || '1.0.0',
-        description: data.description || '',
-        projectId: data.projectId || '1',
-        status: 'planning',
-        plannedDate: data.plannedDate,
-        testRunIds: [],
-        createdBy: '1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      return newRelease;
-    },
-    update: async (id: string, data: Partial<Release>): Promise<Release> => {
-      await delay(API_DELAY);
-      const existing = mockReleases.find(r => r.id === id);
-      if (!existing) throw new Error('Release not found');
-      return { ...existing, ...data, updatedAt: new Date().toISOString() };
-    },
-    delete: async (id: string): Promise<void> => {
-      await delay(API_DELAY);
-    },
+    list: (projectId?: string) => releasesService.list({ projectId }),
+    get: (id: string) => releasesService.get(id),
+    create: (data: Partial<Release>) => releasesService.create(data),
+    update: (id: string, data: Partial<Release>) => releasesService.update(id, data),
+    delete: (id: string) => releasesService.delete(id),
   },
 
-  // Dashboard
+  // ── Dashboard ─────────────────────────────────────────────────────────────────
   dashboard: {
-    getStats: async (projectId?: string): Promise<DashboardStats> => {
-      await delay(API_DELAY);
-      return mockDashboardStats;
-    },
+    getStats: (projectId?: string) => dashboardService.getStats({ projectId }),
   },
 
-  // Users
+  // ── Users ─────────────────────────────────────────────────────────────────────
   users: {
-    list: async (): Promise<User[]> => {
-      await delay(API_DELAY);
-      return mockUsers;
-    },
+    list: (params?: Parameters<typeof usersService.list>[0]) => usersService.list(params),
+    get: (id: string) => usersService.get(id),
+    invite: usersService.invite,
+    acceptInvite: usersService.acceptInvite,
+    updateProfile: usersService.updateProfile,
+    changePassword: usersService.changePassword,
+    activate: usersService.activate,
+    deactivate: usersService.deactivate,
+    updateRole: usersService.updateRole,
+    delete: usersService.delete,
   },
 };
+
+// Named re-exports for callers who prefer direct service imports
+export { authService } from './modules/auth.service';
+export { usersService } from './modules/users.service';
+export { organizationsService } from './modules/organizations.service';
+export { projectsService } from './modules/projects.service';
+export { testSuitesService } from './modules/test-suites.service';
+export { testCasesService } from './modules/test-cases.service';
+export { testRunsService } from './modules/test-runs.service';
+export { releasesService } from './modules/releases.service';
+export { dashboardService } from './modules/dashboard.service';
+export { httpClient } from './http-client';
+export type { ApiError } from './http-client';

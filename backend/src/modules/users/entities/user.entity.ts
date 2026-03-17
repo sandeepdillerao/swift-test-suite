@@ -1,3 +1,5 @@
+import { Organization } from '@/modules/organizations/entities/organization.entity';
+import { Exclude } from 'class-transformer';
 import {
   Column,
   CreateDateColumn,
@@ -9,8 +11,6 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Exclude } from 'class-transformer';
-import { Organization } from '@/modules/organizations/entities/organization.entity';
 
 export enum UserRole {
   ADMIN = 'admin',
