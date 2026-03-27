@@ -31,12 +31,19 @@ export const useCreateTestCase = () => {
 
 export const useUpdateTestCase = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<TestCase> }) => 
+    mutationFn: ({ id, data }: { id: string; data: Partial<TestCase> }) =>
       api.testCases.update(id, data),
-    onSuccess: () => {
+    onSuccess: (updatedTestCase, { id, data }) => {
       queryClient.invalidateQueries({ queryKey: ['testCases'] });
+
+      // Auto-sync status to Jira subtask if linked and status changed
+      if (data.status && updatedTestCase?.jiraSubtaskId) {
+        api.integrations.syncJiraStatus(id, data.status).catch(() => {
+          // Silent — non-blocking, sync errors don't affect the update
+        });
+      }
     },
   });
 };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, Check, X, Loader2, ExternalLink, ChevronDown, ChevronUp, AlertCircle, Settings as SettingsIcon } from 'lucide-react';
+import { Sparkles, Check, Loader2, ChevronDown, ChevronUp, AlertCircle, Settings as SettingsIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAIConfigStore, AI_PROVIDERS } from '@/stores/aiConfigStore';
 import {
@@ -23,119 +23,55 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { toast } from 'sonner';
+import { useGenerateFromJira, useSaveGeneratedTestCases } from '@/hooks/useIntegrations';
 import type { TestCase, TestStep } from '@/types';
+import type { JiraIssueDetail, GeneratedTestCaseItem } from '@/services/modules/integrations.service';
 
-interface GeneratedTestCase {
+interface GeneratedTestCase extends GeneratedTestCaseItem {
   id: string;
-  title: string;
-  description: string;
-  preconditions: string;
-  steps: TestStep[];
-  expectedResult: string;
-  priority: 'critical' | 'high' | 'medium' | 'low';
-  type: 'manual' | 'automated';
-  tags: string[];
   selected: boolean;
 }
-
-// Mock AI generation
-const mockGenerateTestCases = async (ticketId: string): Promise<GeneratedTestCase[]> => {
-  await new Promise(r => setTimeout(r, 2000));
-  return [
-    {
-      id: 'gen-1',
-      title: `Verify ${ticketId} - Happy path user flow`,
-      description: `Validate the main user flow described in ${ticketId}`,
-      preconditions: 'User is logged in with valid credentials',
-      steps: [
-        { id: 's1', order: 1, action: 'Navigate to the feature page', expectedResult: 'Feature page loads correctly' },
-        { id: 's2', order: 2, action: 'Perform the primary action', expectedResult: 'Action completes successfully' },
-        { id: 's3', order: 3, action: 'Verify the result', expectedResult: 'Expected output is displayed' },
-      ],
-      expectedResult: 'Feature works as described in the acceptance criteria',
-      priority: 'high',
-      type: 'manual',
-      tags: ['regression', ticketId.toLowerCase()],
-      selected: true,
-    },
-    {
-      id: 'gen-2',
-      title: `Verify ${ticketId} - Error handling`,
-      description: `Validate error scenarios for ${ticketId}`,
-      preconditions: 'User is logged in',
-      steps: [
-        { id: 's1', order: 1, action: 'Navigate to the feature page', expectedResult: 'Feature page loads' },
-        { id: 's2', order: 2, action: 'Provide invalid input', expectedResult: 'Validation error is shown' },
-        { id: 's3', order: 3, action: 'Submit without required fields', expectedResult: 'Error message appears' },
-      ],
-      expectedResult: 'Appropriate error messages are displayed for all invalid inputs',
-      priority: 'medium',
-      type: 'manual',
-      tags: ['negative', ticketId.toLowerCase()],
-      selected: true,
-    },
-    {
-      id: 'gen-3',
-      title: `Verify ${ticketId} - Boundary conditions`,
-      description: `Test edge cases and boundary conditions for ${ticketId}`,
-      preconditions: 'Test environment is set up with boundary data',
-      steps: [
-        { id: 's1', order: 1, action: 'Test with minimum values', expectedResult: 'System handles minimum values' },
-        { id: 's2', order: 2, action: 'Test with maximum values', expectedResult: 'System handles maximum values' },
-        { id: 's3', order: 3, action: 'Test with empty/null values', expectedResult: 'System handles gracefully' },
-      ],
-      expectedResult: 'All boundary conditions are handled correctly',
-      priority: 'medium',
-      type: 'manual',
-      tags: ['boundary', ticketId.toLowerCase()],
-      selected: true,
-    },
-    {
-      id: 'gen-4',
-      title: `Verify ${ticketId} - Permission check`,
-      description: `Ensure proper authorization for ${ticketId} feature`,
-      preconditions: 'Multiple user roles available',
-      steps: [
-        { id: 's1', order: 1, action: 'Log in as admin user', expectedResult: 'Full access granted' },
-        { id: 's2', order: 2, action: 'Log in as regular user', expectedResult: 'Limited access as expected' },
-        { id: 's3', order: 3, action: 'Try accessing without login', expectedResult: 'Redirected to login page' },
-      ],
-      expectedResult: 'Feature respects role-based access control',
-      priority: 'high',
-      type: 'manual',
-      tags: ['security', ticketId.toLowerCase()],
-      selected: false,
-    },
-  ];
-};
 
 interface GenerateFromJiraDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAccept: (testCases: Partial<TestCase>[]) => void;
   projectId?: string;
+  suiteId?: string;
   suites?: { id: string; name: string }[];
   isAiConfigured?: boolean;
 }
 
-export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId, suites = [], isAiConfigured = false }: GenerateFromJiraDialogProps) => {
+export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId, suiteId, suites = [], isAiConfigured = false }: GenerateFromJiraDialogProps) => {
   const [ticketId, setTicketId] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [generated, setGenerated] = useState<GeneratedTestCase[]>([]);
+  const [jiraIssue, setJiraIssue] = useState<JiraIssueDetail | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { activeProvider, activeModel } = useAIConfigStore();
   const providerLabel = AI_PROVIDERS.find(p => p.provider === activeProvider)?.label || activeProvider;
 
+  const generateMutation = useGenerateFromJira();
+  const saveMutation = useSaveGeneratedTestCases();
+
   const handleGenerate = async () => {
     if (!ticketId.trim()) return;
-    setIsGenerating(true);
     setGenerated([]);
+    setJiraIssue(null);
+
     try {
-      const results = await mockGenerateTestCases(ticketId.trim().toUpperCase());
-      setGenerated(results);
-    } finally {
-      setIsGenerating(false);
+      const result = await generateMutation.mutateAsync(ticketId.trim().toUpperCase());
+      setJiraIssue(result.jiraIssue);
+      setGenerated(
+        result.generatedTestCases.map((tc, i) => ({
+          ...tc,
+          id: `gen-${i + 1}`,
+          selected: true,
+        })),
+      );
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate test cases');
     }
   };
 
@@ -143,28 +79,51 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId
     setGenerated(prev => prev.map(g => g.id === id ? { ...g, selected: !g.selected } : g));
   };
 
-  const handleAccept = () => {
+  const handleAccept = async () => {
     const selected = generated.filter(g => g.selected);
-    onAccept(selected.map(g => ({
-      title: g.title,
-      description: g.description,
-      preconditions: g.preconditions,
-      steps: g.steps,
-      expectedResult: g.expectedResult,
-      priority: g.priority,
-      type: g.type,
-      tags: g.tags,
-      jiraTicketId: ticketId.trim().toUpperCase(),
-      jiraSyncStatus: 'synced' as const,
-      projectId,
-      suiteId: suites[0]?.id,
-    })));
-    onOpenChange(false);
-    setGenerated([]);
-    setTicketId('');
+    const resolvedSuiteId = suiteId || suites[0]?.id;
+
+    if (projectId && resolvedSuiteId) {
+      try {
+        await saveMutation.mutateAsync({
+          projectId,
+          suiteId: resolvedSuiteId,
+          jiraIssueKey: ticketId.trim().toUpperCase(),
+          testCases: selected.map(({ id, selected: _, ...rest }) => rest),
+        });
+        toast.success(`${selected.length} test case${selected.length !== 1 ? 's' : ''} created`);
+        onOpenChange(false);
+        setGenerated([]);
+        setTicketId('');
+        setJiraIssue(null);
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to save test cases');
+      }
+    } else {
+      // Fallback to the onAccept callback if no project/suite context
+      onAccept(selected.map(g => ({
+        title: g.title,
+        description: g.description,
+        preconditions: g.preconditions,
+        steps: g.steps as TestStep[],
+        expectedResult: g.expectedResult,
+        priority: g.priority as TestCase['priority'],
+        type: g.type as TestCase['type'],
+        tags: g.tags,
+        jiraTicketId: ticketId.trim().toUpperCase(),
+        jiraSyncStatus: 'synced' as const,
+        projectId,
+        suiteId: resolvedSuiteId,
+      })));
+      onOpenChange(false);
+      setGenerated([]);
+      setTicketId('');
+      setJiraIssue(null);
+    }
   };
 
   const selectedCount = generated.filter(g => g.selected).length;
+  const isGenerating = generateMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -209,7 +168,7 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId
                 onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
               />
             </div>
-            <Button onClick={handleGenerate} disabled={!ticketId.trim() || isGenerating}>
+            <Button onClick={handleGenerate} disabled={!ticketId.trim() || isGenerating || !isAiConfigured}>
               {isGenerating ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -219,7 +178,7 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId
             </Button>
           </div>
 
-          {/* Mock Jira Ticket Preview */}
+          {/* Jira Ticket Preview */}
           {isGenerating && (
             <Card className="border-dashed">
               <CardContent className="py-4">
@@ -236,12 +195,30 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId
             </Card>
           )}
 
+          {/* Real Jira Issue Preview */}
+          {jiraIssue && !isGenerating && (
+            <Card>
+              <CardContent className="py-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20">🔷 {jiraIssue.key}</Badge>
+                  {jiraIssue.issueType && <Badge variant="outline" className="text-xs">{jiraIssue.issueType}</Badge>}
+                  {jiraIssue.status && <Badge variant="secondary" className="text-xs">{jiraIssue.status}</Badge>}
+                  {jiraIssue.priority && <Badge variant="outline" className="text-xs">{jiraIssue.priority}</Badge>}
+                </div>
+                <p className="font-medium text-sm">{jiraIssue.summary}</p>
+                {jiraIssue.description && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-3">{jiraIssue.description}</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Generated Results */}
           {generated.length > 0 && (
             <>
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">
-                  Generated {generated.length} test cases • {selectedCount} selected
+                  Generated {generated.length} test cases · {selectedCount} selected
                 </p>
                 <Button
                   variant="ghost"
@@ -332,8 +309,12 @@ export const GenerateFromJiraDialog = ({ open, onOpenChange, onAccept, projectId
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           {generated.length > 0 && (
-            <Button onClick={handleAccept} disabled={selectedCount === 0} className="gap-2">
-              <Check className="h-4 w-4" />
+            <Button onClick={handleAccept} disabled={selectedCount === 0 || saveMutation.isPending} className="gap-2">
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
               Accept {selectedCount} Test Case{selectedCount !== 1 ? 's' : ''}
             </Button>
           )}

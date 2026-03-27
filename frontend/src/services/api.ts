@@ -18,6 +18,7 @@ import { testRunsService } from './modules/test-runs.service';
 import { releasesService } from './modules/releases.service';
 import { dashboardService } from './modules/dashboard.service';
 import { settingsService } from './modules/settings.service';
+import { integrationsService } from './modules/integrations.service';
 import type { Project, TestCase, TestRun, TestRunCase, Release } from '@/types';
 
 export const api = {
@@ -106,6 +107,23 @@ export const api = {
     deleteApiKey: (provider: string) => settingsService.deleteApiKey(provider),
   },
 
+  // ── Integrations ─────────────────────────────────────────────────────────────
+  integrations: {
+    getJiraConfig: () => integrationsService.getJiraConfig(),
+    saveJiraConfig: integrationsService.saveJiraConfig,
+    disconnectJira: () => integrationsService.disconnectJira(),
+    testJiraConnection: () => integrationsService.testJiraConnection(),
+    verifyJiraCredentials: integrationsService.verifyJiraCredentials,
+    getJiraProjects: integrationsService.getJiraProjects,
+    searchJiraIssues: integrationsService.searchJiraIssues,
+    getJiraIssue: integrationsService.getJiraIssue,
+    linkJiraIssue: integrationsService.linkJiraIssue,
+    unlinkJiraIssue: integrationsService.unlinkJiraIssue,
+    syncJiraStatus: integrationsService.syncJiraStatus,
+    generateFromJira: integrationsService.generateFromJira,
+    saveGeneratedTestCases: integrationsService.saveGeneratedTestCases,
+  },
+
   // ── Users ─────────────────────────────────────────────────────────────────────
   users: {
     list: (params?: Parameters<typeof usersService.list>[0]) => usersService.list(params),
@@ -132,5 +150,6 @@ export { testRunsService } from './modules/test-runs.service';
 export { releasesService } from './modules/releases.service';
 export { dashboardService } from './modules/dashboard.service';
 export { settingsService } from './modules/settings.service';
+export { integrationsService } from './modules/integrations.service';
 export { httpClient } from './http-client';
 export type { ApiError } from './http-client';

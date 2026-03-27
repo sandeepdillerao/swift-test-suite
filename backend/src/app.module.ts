@@ -22,6 +22,7 @@ import { TestRunsModule } from './modules/test-runs/test-runs.module';
 import { ReleasesModule } from './modules/releases/releases.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     ReleasesModule,
     DashboardModule,
     SettingsModule,
+    IntegrationsModule,
   ],
   providers: [
     {
