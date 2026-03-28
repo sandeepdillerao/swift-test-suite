@@ -127,6 +127,7 @@ export interface TestRunCase {
   comment?: string;
   defects?: string[];
   actualResult?: string;
+  testCase?: TestCase;
 }
 
 export interface TestRunHistory {

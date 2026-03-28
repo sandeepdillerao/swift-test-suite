@@ -56,20 +56,24 @@ export class TestRunsService {
       where,
       skip, take,
       order: { [sortBy]: sortOrder },
-      relations: ['testCases'],
+      relations: ['testCases', 'testCases.testCase'],
     });
     return paginate(data, total, page, take);
   }
 
   async findById(id: string): Promise<TestRun> {
-    const run = await this.runRepo.findOne({ where: { id }, relations: ['testCases'] });
+    const run = await this.runRepo.findOne({ where: { id }, relations: ['testCases', 'testCases.testCase'] });
     if (!run) throw new NotFoundException('Test run not found');
     return run;
   }
 
   async update(id: string, dto: UpdateTestRunDto): Promise<TestRun> {
     await this.findById(id);
-    await this.runRepo.update(id, dto as any);
+    const updateData: any = { ...dto };
+    if (dto.status === TestRunStatus.COMPLETED) {
+      updateData.completedAt = new Date();
+    }
+    await this.runRepo.update(id, updateData);
     return this.findById(id);
   }
 

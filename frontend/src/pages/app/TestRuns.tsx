@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useTestRuns, useCreateTestRun, useDeleteTestRun } from '@/hooks/useTestRuns';
+import { useTestRuns, useCreateTestRun, useUpdateTestRun, useDeleteTestRun } from '@/hooks/useTestRuns';
 import { useReleases } from '@/hooks/useReleases';
 import { useProjectStore } from '@/stores/projectStore';
 import { TestRunDialog } from '@/components/testruns/TestRunDialog';
@@ -51,6 +51,7 @@ export const TestRuns = () => {
   const { data: testRuns = [], isLoading } = useTestRuns(projectId);
   const { data: releases = [] } = useReleases(projectId);
   const createTestRun = useCreateTestRun();
+  const updateTestRun = useUpdateTestRun();
   const deleteTestRun = useDeleteTestRun();
   
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -72,12 +73,22 @@ export const TestRuns = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleSave = async (data: Partial<TestRun>) => {
+  const handleSave = async (data: Record<string, any>) => {
     try {
-      await createTestRun.mutateAsync(data);
-      toast.success('Test run created successfully');
-    } catch (error) {
-      toast.error('Failed to create test run');
+      if (selectedRun) {
+        // UpdateTestRunDto only allows these fields
+        const { name, description, assignedTo, environment, buildNumber } = data;
+        await updateTestRun.mutateAsync({
+          id: selectedRun.id,
+          data: { name, description, assignedTo, environment, buildNumber },
+        });
+        toast.success('Test run updated successfully');
+      } else {
+        await createTestRun.mutateAsync(data);
+        toast.success('Test run created successfully');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save test run');
     }
   };
 

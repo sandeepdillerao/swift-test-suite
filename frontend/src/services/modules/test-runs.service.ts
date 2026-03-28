@@ -13,7 +13,7 @@ export const testRunsService = {
   get: (id: string) =>
     httpClient.get<TestRun>(`/test-runs/${id}`).then((r) => r.data),
 
-  create: (data: Partial<TestRun>) =>
+  create: (data: Record<string, any>) =>
     httpClient.post<TestRun>('/test-runs', data).then((r) => r.data),
 
   update: (id: string, data: Partial<TestRun>) =>

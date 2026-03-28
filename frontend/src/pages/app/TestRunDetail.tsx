@@ -9,9 +9,6 @@ import {
   Clock,
   Play,
   Download,
-  MoreHorizontal,
-  Edit,
-  Archive,
   User,
   Tag,
   GitBranch,
@@ -29,9 +26,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -51,8 +45,8 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { useTestRun, useTestRunHistory, useUpdateTestRun, useUpdateTestRunCase } from '@/hooks/useTestRuns';
-import { useTestCases } from '@/hooks/useTestCases';
 import { useReleases } from '@/hooks/useReleases';
+import { useUsers } from '@/hooks/useUsers';
 import { useAuthStore } from '@/stores/authStore';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -74,14 +68,14 @@ export const TestRunDetail = () => {
 
   const { data: testRun, isLoading } = useTestRun(id!);
   const { data: history = [] } = useTestRunHistory(id!);
-  const { data: allTestCases = [] } = useTestCases();
-  const { data: releases = [] } = useReleases();
+  const { data: releases = [] } = useReleases(testRun?.projectId);
+  const { data: usersData } = useUsers({ limit: 100 });
+  const users: any[] = (usersData as any)?.data ?? (usersData as any)?.users ?? (Array.isArray(usersData) ? usersData : []);
   const updateTestRun = useUpdateTestRun();
   const updateTestRunCase = useUpdateTestRunCase();
 
   const [expandedCase, setExpandedCase] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [comment, setComment] = useState('');
 
   if (isLoading) {
     return (
@@ -118,8 +112,10 @@ export const TestRunDetail = () => {
     ? testRun.testCases 
     : testRun.testCases.filter(tc => tc.status === statusFilter);
 
-  const getTestCaseDetails = (testCaseId: string) => {
-    return allTestCases.find(tc => tc.id === testCaseId);
+  const getAssigneeName = (userId?: string) => {
+    if (!userId) return null;
+    const u = users.find((u: any) => u.id === userId);
+    return u ? (u.name || u.email) : userId.slice(0, 8);
   };
 
   const handleStatusChange = async (runCase: TestRunCase, newStatus: TestStatus) => {
@@ -139,10 +135,7 @@ export const TestRunDetail = () => {
     try {
       await updateTestRun.mutateAsync({
         id: testRun.id,
-        data: {
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-        },
+        data: { status: 'completed' },
       });
       toast.success('Test run marked as completed');
     } catch {
@@ -174,7 +167,7 @@ export const TestRunDetail = () => {
         executionProgress,
       },
       testCases: testRun.testCases.map(tc => {
-        const details = getTestCaseDetails(tc.testCaseId);
+        const details = tc.testCase;
         return {
           tcId: details?.tcId ?? tc.testCaseId,
           title: details?.title,
@@ -204,7 +197,7 @@ export const TestRunDetail = () => {
   const exportCSVReport = () => {
     const headers = ['TC ID', 'Title', 'Priority', 'Status', 'Executed At', 'Duration (s)', 'Comment', 'Defects'];
     const rows = testRun.testCases.map(tc => {
-      const details = getTestCaseDetails(tc.testCaseId);
+      const details = tc.testCase;
       return [
         details?.tcId ?? tc.testCaseId,
         details?.title || '',
@@ -427,7 +420,7 @@ export const TestRunDetail = () => {
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground">Assigned to:</span>
-                <code className="text-xs bg-muted px-1 py-0.5 rounded">{testRun.assignedTo.slice(0, 8)}</code>
+                <span>{getAssigneeName(testRun.assignedTo)}</span>
               </div>
             )}
           </CardContent>
@@ -469,7 +462,7 @@ export const TestRunDetail = () => {
 
           <div className="space-y-2">
             {filteredCases.map((runCase) => {
-              const testCase = getTestCaseDetails(runCase.testCaseId);
+              const testCase = runCase.testCase;
               const statusInfo = statusConfig[runCase.status];
               const StatusIcon = statusInfo.icon;
               const executedBy = runCase.executedBy;
@@ -620,7 +613,7 @@ export const TestRunDetail = () => {
         <TabsContent value="history" className="mt-4">
           <Card>
             <CardContent className="p-0">
-              <ScrollArea className="h-96">
+              <div className="h-96 overflow-y-auto">
                 <div className="divide-y">
                   {history.length === 0 ? (
                     <div className="text-center py-12 text-muted-foreground">
@@ -628,7 +621,7 @@ export const TestRunDetail = () => {
                     </div>
                   ) : (
                     history.map((item) => {
-                      const tcDetails = getTestCaseDetails(item.testCaseId);
+                      const tcDetails = testRun.testCases.find(tc => tc.testCaseId === item.testCaseId)?.testCase;
                       const statusInfo = statusConfig[item.status];
                       const StatusIcon = statusInfo.icon;
 
@@ -660,7 +653,7 @@ export const TestRunDetail = () => {
                     })
                   )}
                 </div>
-              </ScrollArea>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

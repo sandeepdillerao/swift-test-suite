@@ -74,7 +74,7 @@ export const api = {
   testRuns: {
     list: (projectId?: string) => testRunsService.list({ projectId }),
     get: (id: string) => testRunsService.get(id),
-    create: (data: Partial<TestRun>) => testRunsService.create(data),
+    create: (data: Record<string, any>) => testRunsService.create(data),
     update: (id: string, data: Partial<TestRun>) => testRunsService.update(id, data),
     delete: (id: string) => testRunsService.delete(id),
     getHistory: (runId: string) => testRunsService.getHistory(runId),

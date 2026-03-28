@@ -28,9 +28,9 @@ export const useTestRunHistory = (runId: string) => {
 
 export const useCreateTestRun = () => {
   const queryClient = useQueryClient();
-  
+
   return useMutation({
-    mutationFn: (data: Partial<TestRun>) => api.testRuns.create(data),
+    mutationFn: (data: Record<string, any>) => api.testRuns.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['testRuns'] });
     },
