@@ -58,6 +58,22 @@ export interface GenerateFromJiraResponse {
   generatedTestCases: GeneratedTestCaseItem[];
 }
 
+export interface AiAuditLog {
+  id: string;
+  userId: string;
+  orgId: string;
+  provider: string;
+  model: string;
+  jiraIssueKey: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  responseTimeMs: number;
+  testCasesGenerated: number;
+  success: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
 export const integrationsService = {
   // ── Jira Config ─────────────────────────────────────────────────────────
   getJiraConfig: () =>
@@ -107,6 +123,10 @@ export const integrationsService = {
   generateFromJira: (jiraIssueKey: string) =>
     httpClient.post<GenerateFromJiraResponse>('/integrations/ai/generate-from-jira', { jiraIssueKey }).then((r) => r.data),
 
-  saveGeneratedTestCases: (data: { projectId: string; suiteId: string; jiraIssueKey: string; testCases: GeneratedTestCaseItem[] }) =>
+  saveGeneratedTestCases: (data: { projectId: string; suiteId: string; jiraIssueKey: string; createSubtask?: boolean; testCases: GeneratedTestCaseItem[] }) =>
     httpClient.post('/integrations/ai/save-generated', data).then((r) => r.data),
+
+  // ── AI Audit Logs ──────────────────────────────────────────────────────
+  getAiAuditLogs: (limit = 50, offset = 0) =>
+    httpClient.get<{ logs: AiAuditLog[]; total: number }>(`/integrations/ai/audit-logs?limit=${limit}&offset=${offset}`).then((r) => r.data),
 };

@@ -35,15 +35,19 @@ export const AI_PROVIDERS: AIProviderConfig[] = [
 interface AIConfigState {
   activeProvider: AIProvider;
   activeModel: string;
+  enabledProviders: Record<AIProvider, boolean>;
   setActiveProvider: (provider: AIProvider) => void;
   setActiveModel: (model: string) => void;
+  setProviderEnabled: (provider: AIProvider, enabled: boolean) => void;
+  getEnabledProviders: () => AIProviderConfig[];
 }
 
 export const useAIConfigStore = create<AIConfigState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       activeProvider: 'gemini',
       activeModel: 'gemini-2.5-flash',
+      enabledProviders: { gemini: true, openai: true, anthropic: true },
       setActiveProvider: (provider) => {
         const providerConfig = AI_PROVIDERS.find((p) => p.provider === provider);
         set({
@@ -52,6 +56,26 @@ export const useAIConfigStore = create<AIConfigState>()(
         });
       },
       setActiveModel: (model) => set({ activeModel: model }),
+      setProviderEnabled: (provider, enabled) => {
+        const state = get();
+        const next = { ...state.enabledProviders, [provider]: enabled };
+        const updates: Partial<AIConfigState> = { enabledProviders: next };
+
+        // If disabling the active provider, auto-switch to first enabled one
+        if (!enabled && state.activeProvider === provider) {
+          const fallback = AI_PROVIDERS.find((p) => next[p.provider] && p.provider !== provider);
+          if (fallback) {
+            updates.activeProvider = fallback.provider;
+            updates.activeModel = fallback.models[0] || '';
+          }
+        }
+
+        set(updates);
+      },
+      getEnabledProviders: () => {
+        const { enabledProviders } = get();
+        return AI_PROVIDERS.filter((p) => enabledProviders[p.provider]);
+      },
     }),
     {
       name: 'ai-config-storage',

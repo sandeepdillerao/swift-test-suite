@@ -33,6 +33,7 @@ export class TestCase {
   @Column({ type: 'varchar', length: 100, nullable: true }) jiraSubtaskId: string | null;
   @Column({ type: 'varchar', length: 500, nullable: true }) jiraSubtaskUrl: string | null;
   @Column({ type: 'enum', enum: JiraSyncStatus, nullable: true }) jiraSyncStatus: JiraSyncStatus | null;
+  @Column({ type: 'boolean', default: false }) isAiGenerated: boolean;
   @Column({ type: 'timestamp', nullable: true }) lastRunAt: Date | null;
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;

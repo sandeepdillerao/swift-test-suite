@@ -89,10 +89,17 @@ export const useGenerateFromJira = () => {
 export const useSaveGeneratedTestCases = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { projectId: string; suiteId: string; jiraIssueKey: string; testCases: GeneratedTestCaseItem[] }) =>
+    mutationFn: (data: { projectId: string; suiteId: string; jiraIssueKey: string; createSubtask?: boolean; testCases: GeneratedTestCaseItem[] }) =>
       api.integrations.saveGeneratedTestCases(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['testCases'] });
     },
+  });
+};
+
+export const useAiAuditLogs = (limit = 50, offset = 0) => {
+  return useQuery({
+    queryKey: ['aiAuditLogs', limit, offset],
+    queryFn: () => api.integrations.getAiAuditLogs(limit, offset),
   });
 };

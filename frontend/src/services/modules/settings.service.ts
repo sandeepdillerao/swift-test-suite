@@ -10,6 +10,7 @@ export interface NotificationSettings {
 export interface AISettings {
   activeProvider: string;
   activeModel: string;
+  enabledProviders?: Record<string, boolean>;
 }
 
 export interface OrganizationSettings {
@@ -41,7 +42,7 @@ export const settingsService = {
   updateNotifications: (data: Partial<NotificationSettings>) =>
     httpClient.patch<NotificationSettings>('/settings/notifications', data).then((r) => r.data),
 
-  updateAi: (data: AISettings) =>
+  updateAi: (data: Partial<AISettings>) =>
     httpClient.patch<AISettings>('/settings/ai', data).then((r) => r.data),
 
   updateOrganization: (data: OrganizationSettings) =>

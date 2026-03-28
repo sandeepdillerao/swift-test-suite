@@ -37,9 +37,14 @@ export class SettingsService {
     };
 
     const aiSettings = (user.settings as any)?.ai ?? {
-      activeProvider: 'anthropic',
-      activeModel: 'claude-sonnet-4-6',
+      activeProvider: 'gemini',
+      activeModel: 'gemini-2.5-flash',
+      enabledProviders: { gemini: true, openai: true, anthropic: true },
     };
+    // Ensure enabledProviders always has a default
+    if (!aiSettings.enabledProviders) {
+      aiSettings.enabledProviders = { gemini: true, openai: true, anthropic: true };
+    }
 
     const encryptedKeys: Record<string, any> = (user.settings as any)?.encryptedApiKeys ?? {};
     const configuredProviders = VALID_PROVIDERS.map(p => ({ provider: p, configured: !!encryptedKeys[p] }));

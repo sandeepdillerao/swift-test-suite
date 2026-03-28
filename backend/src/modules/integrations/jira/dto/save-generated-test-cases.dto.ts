@@ -1,4 +1,4 @@
-import { IsUUID, IsString, IsArray, ValidateNested, IsOptional, IsEnum } from 'class-validator';
+import { IsUUID, IsString, IsArray, IsBoolean, ValidateNested, IsOptional, IsEnum, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { Priority, TestType } from '@/modules/test-cases/entities/test-case.enums';
@@ -9,6 +9,8 @@ class TestStepDto {
   id: string;
 
   @ApiProperty()
+  @IsNumber()
+  @Type(() => Number)
   order: number;
 
   @ApiProperty()
@@ -74,6 +76,12 @@ export class SaveGeneratedTestCasesDto {
   @ApiProperty({ example: 'PROJ-1234' })
   @IsString()
   jiraIssueKey: string;
+
+  @ApiPropertyOptional({ description: 'Create a Jira subtask for each generated test case' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  createSubtask?: boolean;
 
   @ApiProperty({ type: [GeneratedTestCaseItemDto] })
   @IsArray()

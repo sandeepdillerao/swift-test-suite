@@ -103,11 +103,21 @@ Projects · TestSuites · TestCases · TestRuns · Releases · Dashboard
 
 | Integration | Status | Location |
 |---|---|---|
-| Jira | UI exists, API pending | `TestCase.jiraTicketId/Url/SyncStatus`, `GenerateFromJiraDialog.tsx` |
+| Jira | Fully implemented | `backend/src/modules/integrations/jira/`, `GenerateFromJiraDialog.tsx`, `JiraLinkDialog.tsx` |
+| AI Generation | Fully implemented | `backend/src/modules/integrations/ai-generation/`, `stores/aiConfigStore.ts` |
+| Settings (API Keys) | Fully implemented | `backend/src/modules/settings/`, encrypted key storage |
 | GitLab | UI exists, API pending | `pages/app/Integrations.tsx` |
-| AI (Gemini/OpenAI/Anthropic) | Store ready, calls pending | `stores/aiConfigStore.ts` |
 | Email | Console logging only | `AuthService` — log token to console |
 | Redis | Provisioned, unused | Docker service ready |
+
+### Jira Integration Details
+- Config stored encrypted in `organization.settings.jira`
+- Searchable issue picker (project + issue search + type filters)
+- Link test cases to Jira issues with optional subtask creation
+- Status sync: Pass→Done, Fail→To Do, In Progress→In Progress
+- AI generates 3-6 test cases from Jira issue using LLM (OpenAI/Anthropic/Gemini)
+- Generated test cases auto-populate editable create form with Jira ticket mapping
+- See `.ai/context/integrations.md` for full details
 
 ---
 
@@ -126,7 +136,7 @@ Org: `TestFlow Demo` (slug: `testflow-demo`)
 ## AI Support Files
 ```
 .ai/
-  context/    project-overview · architecture · backend · frontend · infra
+  context/    project-overview · architecture · backend · frontend · infra · integrations
   skills/     backend-api · frontend-feature · unit-test · docker · integration-retry
   prompts/    create-module · debug-error · write-tests · optimize-performance
   agents/     backend-agent · frontend-agent · qa-agent · devops-agent

@@ -52,13 +52,36 @@ export const Settings = () => {
   const queryClient = useQueryClient();
 
   // AI config store — only UI preferences (provider/model), no keys
-  const { activeProvider, activeModel, setActiveProvider, setActiveModel } = useAIConfigStore();
+  const { activeProvider, activeModel, enabledProviders, setActiveProvider, setActiveModel, setProviderEnabled, getEnabledProviders } = useAIConfigStore();
 
   // ── Settings from backend ──────────────────────────────────────────────────
   const { data: settings, isLoading: settingsLoading } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.settings.getAll(),
   });
+
+  // ── Hydrate AI config from backend ─────────────────────────────────────────
+  useEffect(() => {
+    if (settings?.ai) {
+      const backendEnabled = settings.ai.enabledProviders;
+      if (backendEnabled) {
+        // Sync backend state into Zustand store
+        for (const p of ['gemini', 'openai', 'anthropic'] as const) {
+          if (backendEnabled[p] !== undefined && backendEnabled[p] !== enabledProviders[p]) {
+            setProviderEnabled(p, backendEnabled[p]);
+          }
+        }
+      }
+      // Sync active provider/model from backend if different
+      if (settings.ai.activeProvider && settings.ai.activeProvider !== activeProvider) {
+        setActiveProvider(settings.ai.activeProvider as AIProvider);
+      }
+      if (settings.ai.activeModel && settings.ai.activeModel !== activeModel) {
+        setActiveModel(settings.ai.activeModel);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings?.ai]);
 
   // ── Notifications state ────────────────────────────────────────────────────
   const [notifs, setNotifs] = useState({
@@ -186,12 +209,22 @@ export const Settings = () => {
     const providerConfig = AI_PROVIDERS.find((p) => p.provider === provider);
     const model = providerConfig?.models[0] ?? '';
     setActiveModel(model);
-    updateAiMutation.mutate({ activeProvider: provider, activeModel: model });
+    updateAiMutation.mutate({ activeProvider: provider, activeModel: model, enabledProviders });
   };
 
   const handleAiModelChange = (model: string) => {
     setActiveModel(model);
-    updateAiMutation.mutate({ activeProvider: activeProvider, activeModel: model });
+    updateAiMutation.mutate({ activeProvider: activeProvider, activeModel: model, enabledProviders });
+  };
+
+  const handleProviderToggle = (provider: AIProvider, enabled: boolean) => {
+    setProviderEnabled(provider, enabled);
+    const { enabledProviders: updated, activeProvider: newActive, activeModel: newModel } = useAIConfigStore.getState();
+    updateAiMutation.mutate({
+      activeProvider: newActive,
+      activeModel: newModel,
+      enabledProviders: updated,
+    });
   };
 
   const initials = user
@@ -503,10 +536,24 @@ export const Settings = () => {
                   Active Provider
                 </CardTitle>
                 <CardDescription>
-                  Choose which AI provider powers test generation features
+                  Choose which AI provider powers test generation features. Only enabled providers with API keys are available.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {(() => {
+                  const enabled = getEnabledProviders();
+                  const enabledWithKeys = enabled.filter((p) => isKeyConfigured(p.provider));
+                  if (enabledWithKeys.length === 0) {
+                    return (
+                      <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 text-sm text-amber-700 dark:text-amber-300">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        No enabled provider has an API key. Add a key and enable a provider below.
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 <div className="space-y-2">
                   <Label>Provider</Label>
                   <Select value={activeProvider} onValueChange={(v) => handleAiProviderChange(v as AIProvider)}>
@@ -514,12 +561,14 @@ export const Settings = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {AI_PROVIDERS.map((p) => (
-                        <SelectItem key={p.provider} value={p.provider}>
+                      {getEnabledProviders().map((p) => (
+                        <SelectItem key={p.provider} value={p.provider} disabled={!isKeyConfigured(p.provider)}>
                           <div className="flex items-center gap-2">
                             <span>{p.label}</span>
-                            {isKeyConfigured(p.provider) && (
+                            {isKeyConfigured(p.provider) ? (
                               <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">(no key)</span>
                             )}
                           </div>
                         </SelectItem>
@@ -560,36 +609,53 @@ export const Settings = () => {
                 {AI_PROVIDERS.map((provider) => {
                   const configured = isKeyConfigured(provider.provider);
                   const isActive = activeProvider === provider.provider;
+                  const isEnabled = enabledProviders[provider.provider] ?? true;
                   const currentEditKey = editingKeys[provider.provider];
 
                   return (
                     <Card
                       key={provider.provider}
                       className={cn(
-                        'border',
-                        isActive ? 'border-primary/40 bg-primary/5' : 'border-border'
+                        'border transition-opacity',
+                        isActive ? 'border-primary/40 bg-primary/5' : 'border-border',
+                        !isEnabled && 'opacity-60',
                       )}
                     >
                       <CardContent className="py-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-muted-foreground" />
+                            <Sparkles className={cn('h-4 w-4', isEnabled ? 'text-muted-foreground' : 'text-muted-foreground/50')} />
                             <span className="font-medium text-sm">{provider.label}</span>
                             {isActive && (
                               <Badge variant="secondary" className="text-xs">Active</Badge>
                             )}
                           </div>
-                          {configured && (
-                            <Badge
-                              variant="outline"
-                              className="gap-1 text-green-600 border-green-600/30 text-xs"
-                            >
-                              <CheckCircle2 className="h-3 w-3" /> Key set
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-3">
+                            {configured && (
+                              <Badge
+                                variant="outline"
+                                className="gap-1 text-green-600 border-green-600/30 text-xs"
+                              >
+                                <CheckCircle2 className="h-3 w-3" /> Key set
+                              </Badge>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">{isEnabled ? 'Enabled' : 'Disabled'}</span>
+                              <Switch
+                                checked={isEnabled}
+                                onCheckedChange={(checked) => handleProviderToggle(provider.provider, checked)}
+                              />
+                            </div>
+                          </div>
                         </div>
 
-                        {configured ? (
+                        {!isEnabled && (
+                          <p className="text-xs text-muted-foreground">
+                            This provider is disabled and won't appear in the provider selection.
+                          </p>
+                        )}
+
+                        {isEnabled && configured && (
                           <div className="flex items-center gap-2">
                             <code className="flex-1 text-xs bg-muted px-3 py-2 rounded font-mono text-muted-foreground">
                               ••••••••••••••••••••••••••••••••
@@ -605,7 +671,9 @@ export const Settings = () => {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        ) : (
+                        )}
+
+                        {isEnabled && !configured && (
                           <div className="flex gap-2">
                             <Input
                               type="password"
