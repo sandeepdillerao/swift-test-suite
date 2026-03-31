@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useReleases, useCreateRelease, useDeleteRelease } from '@/hooks/useReleases';
+import { useReleases, useCreateRelease, useUpdateRelease, useDeleteRelease } from '@/hooks/useReleases';
 import { useTestRuns } from '@/hooks/useTestRuns';
 import { useProjectStore } from '@/stores/projectStore';
 import { ReleaseDialog } from '@/components/releases/ReleaseDialog';
@@ -49,6 +49,7 @@ export const Releases = () => {
   const { data: releases = [], isLoading } = useReleases(projectId);
   const { data: testRuns = [] } = useTestRuns(projectId);
   const createRelease = useCreateRelease();
+  const updateRelease = useUpdateRelease();
   const deleteRelease = useDeleteRelease();
   
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -72,10 +73,17 @@ export const Releases = () => {
 
   const handleSave = async (data: Partial<Release>) => {
     try {
-      await createRelease.mutateAsync({ ...data, projectId });
-      toast.success('Release created successfully');
+      if (selectedRelease) {
+        // Update existing release — strip fields that shouldn't be sent to PATCH
+        const { id, projectId: _pid, createdBy, createdAt, updatedAt, ...updateData } = data as Release;
+        await updateRelease.mutateAsync({ id: selectedRelease.id, data: updateData });
+        toast.success('Release updated successfully');
+      } else {
+        await createRelease.mutateAsync({ ...data, projectId });
+        toast.success('Release created successfully');
+      }
     } catch (error) {
-      toast.error('Failed to create release');
+      toast.error(selectedRelease ? 'Failed to update release' : 'Failed to create release');
     }
   };
 

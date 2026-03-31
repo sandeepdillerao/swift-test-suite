@@ -1,6 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { getPaginationParams, paginate } from '@/common/utils/pagination.util';
 import { Release } from './entities/release.entity';
 import { ReleaseStatus } from './entities/release.enums';
@@ -12,7 +12,17 @@ import { isUUID } from 'class-validator';
 export class ReleasesService {
   constructor(@InjectRepository(Release) private repo: Repository<Release>) {}
 
+  private async checkDuplicateVersion(projectId: string, version: string, excludeId?: string): Promise<void> {
+    const where: any = { projectId, version };
+    if (excludeId) where.id = Not(excludeId);
+    const existing = await this.repo.findOne({ where });
+    if (existing) {
+      throw new ConflictException(`A release with version "${version}" already exists in this project`);
+    }
+  }
+
   async create(createdBy: string, dto: CreateReleaseDto): Promise<Release> {
+    await this.checkDuplicateVersion(dto.projectId, dto.version);
     const release = this.repo.create({
       ...dto,
       createdBy,
@@ -39,10 +49,25 @@ export class ReleasesService {
   }
 
   async update(id: string, dto: UpdateReleaseDto): Promise<Release> {
-    await this.findById(id);
+    const existing = await this.findById(id);
+
+    // Check version uniqueness if version is being changed
+    if (dto.version && dto.version !== existing.version) {
+      await this.checkDuplicateVersion(existing.projectId, dto.version, id);
+    }
+
     const updateData: any = { ...dto };
     if (dto.plannedDate) updateData.plannedDate = new Date(dto.plannedDate);
     if (dto.releasedDate) updateData.releasedDate = new Date(dto.releasedDate);
+
+    // Strip readonly fields that should never be updated
+    delete updateData.id;
+    delete updateData.projectId;
+    delete updateData.createdBy;
+    delete updateData.createdAt;
+    delete updateData.updatedAt;
+    delete updateData.deletedAt;
+
     await this.repo.update(id, updateData);
     return this.findById(id);
   }
