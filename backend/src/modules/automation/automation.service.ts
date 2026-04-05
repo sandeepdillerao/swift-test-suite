@@ -13,7 +13,9 @@ import { ScriptExecution } from './entities/script-execution.entity';
 import { ScriptStatus, ExecutionStatus, BrowserType, ScriptSource } from './entities/automation.enums';
 import { TestCase } from '@/modules/test-cases/entities/test-case.entity';
 import { TestStatus } from '@/modules/test-cases/entities/test-case.enums';
+import { User } from '@/modules/users/entities/user.entity';
 import { SettingsService, AiProvider } from '@/modules/settings/settings.service';
+import { AiAuditService } from '@/common/modules/ai-audit';
 import { GenerateScriptDto, ImportCodegenScriptDto } from './dto/generate-script.dto';
 import { UpdateScriptDto } from './dto/update-script.dto';
 import { ExecuteScriptDto } from './dto/execute-script.dto';
@@ -50,8 +52,10 @@ export class AutomationService {
     @InjectRepository(AutomationScript) private readonly scriptRepo: Repository<AutomationScript>,
     @InjectRepository(ScriptExecution) private readonly executionRepo: Repository<ScriptExecution>,
     @InjectRepository(TestCase) private readonly testCaseRepo: Repository<TestCase>,
+    @InjectRepository(User) private readonly userRepo: Repository<User>,
     private readonly settingsService: SettingsService,
     private readonly httpService: HttpService,
+    private readonly aiAuditService: AiAuditService,
   ) {
     // Ensure artifacts directory exists on startup
     fs.mkdirSync(ARTIFACTS_ROOT, { recursive: true });
@@ -232,13 +236,26 @@ export class AutomationService {
     }
 
     const { provider, model, apiKey } = await this.getAiCredentials(userId);
+    const orgId = await this.getOrgId(userId);
+    const action = dto.codegenScript ? 'generate_from_codegen' : 'generate_script';
 
     // Build the prompt — if codegen is provided, use the enhanced codegen-first flow
     const prompt = dto.codegenScript
       ? this.buildCodegenEnhancedPrompt(testCase, dto.codegenScript, dto.targetUrl)
       : this.buildGeneratePrompt(testCase, dto.targetUrl);
 
-    const aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+    const startTime = Date.now();
+    let aiResult: { content: string; inputTokens: number; outputTokens: number };
+    try {
+      aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+    } catch (err: any) {
+      this.aiAuditService.log({ userId, orgId, feature: 'automation', action, provider, model, inputTokens: 0, outputTokens: 0, responseTimeMs: Date.now() - startTime, success: false, errorMessage: err.message, metadata: { testCaseId: dto.testCaseId } });
+      throw err;
+    }
+    const responseTimeMs = Date.now() - startTime;
+
+    this.aiAuditService.log({ userId, orgId, feature: 'automation', action, provider, model, inputTokens: aiResult.inputTokens, outputTokens: aiResult.outputTokens, responseTimeMs, success: true, metadata: { testCaseId: dto.testCaseId } });
+
     const cleanScript = this.extractScript(aiResult.content);
 
     const script = this.scriptRepo.create({
@@ -253,7 +270,7 @@ export class AutomationService {
       status: ScriptStatus.READY,
       source: dto.codegenScript ? ScriptSource.CODEGEN : ScriptSource.AI_GENERATED,
       browserType: dto.browserType || BrowserType.CHROMIUM,
-      stabilityScore: dto.codegenScript ? 80 : 70, // Codegen-based gets higher initial score
+      stabilityScore: dto.codegenScript ? 80 : 70,
       createdBy: userId,
     });
 
@@ -267,8 +284,17 @@ export class AutomationService {
     let cleanScript = dto.rawScript;
     try {
       const { provider, model, apiKey } = await this.getAiCredentials(userId);
+      const orgId = await this.getOrgId(userId);
       const prompt = this.buildCodegenEnhancedPrompt(testCase, dto.rawScript, dto.targetUrl);
-      const aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+      const startTime = Date.now();
+      let aiResult: { content: string; inputTokens: number; outputTokens: number };
+      try {
+        aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+      } catch (err: any) {
+        this.aiAuditService.log({ userId, orgId, feature: 'automation', action: 'import_codegen', provider, model, inputTokens: 0, outputTokens: 0, responseTimeMs: Date.now() - startTime, success: false, errorMessage: err.message, metadata: { testCaseId: dto.testCaseId } });
+        throw err;
+      }
+      this.aiAuditService.log({ userId, orgId, feature: 'automation', action: 'import_codegen', provider, model, inputTokens: aiResult.inputTokens, outputTokens: aiResult.outputTokens, responseTimeMs: Date.now() - startTime, success: true, metadata: { testCaseId: dto.testCaseId } });
       cleanScript = this.extractScript(aiResult.content);
     } catch (err) {
       this.logger.warn(`AI refactor failed, using raw script: ${(err as Error).message}`);
@@ -672,8 +698,18 @@ module.exports = defineConfig({
 
     try {
       const { provider, model, apiKey } = await this.getAiCredentials(script.createdBy);
+      const orgId = await this.getOrgId(script.createdBy);
       const prompt = this.buildHealingPrompt(script.activeScript!, errorOutput);
-      const aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+      const startTime = Date.now();
+      let aiResult: { content: string; inputTokens: number; outputTokens: number };
+      try {
+        aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+      } catch (err: any) {
+        this.aiAuditService.log({ userId: script.createdBy, orgId, feature: 'automation', action: 'heal_script', provider, model, inputTokens: 0, outputTokens: 0, responseTimeMs: Date.now() - startTime, success: false, errorMessage: err.message, metadata: { scriptId: script.id, healingAttempt: script.healingAttempts + 1 } });
+        throw err;
+      }
+      this.aiAuditService.log({ userId: script.createdBy, orgId, feature: 'automation', action: 'heal_script', provider, model, inputTokens: aiResult.inputTokens, outputTokens: aiResult.outputTokens, responseTimeMs: Date.now() - startTime, success: true, metadata: { scriptId: script.id, healingAttempt: script.healingAttempts + 1 } });
+
       const healedScript = this.extractScript(aiResult.content);
 
       await this.scriptRepo.update(script.id, {
@@ -761,6 +797,11 @@ module.exports = defineConfig({
     const apiKey = await this.settingsService.getApiKey(userId, provider);
     if (!apiKey) throw new BadRequestException(`No API key configured for ${provider}. Add your key in Settings.`);
     return { provider, model, apiKey };
+  }
+
+  private async getOrgId(userId: string): Promise<string> {
+    const user = await this.userRepo.findOne({ where: { id: userId }, select: ['organizationId'] });
+    return user?.organizationId ?? '';
   }
 
   /**
@@ -879,7 +920,7 @@ ${trimmedError}
 Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown fences.`;
   }
 
-  private async callAiProvider(provider: AiProvider, model: string, apiKey: string, prompt: string): Promise<{ content: string }> {
+  private async callAiProvider(provider: AiProvider, model: string, apiKey: string, prompt: string): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
     try {
       switch (provider) {
         case 'openai': return await this.callOpenAI(model, apiKey, prompt);
@@ -894,7 +935,7 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
     }
   }
 
-  private async callOpenAI(model: string, apiKey: string, prompt: string): Promise<{ content: string }> {
+  private async callOpenAI(model: string, apiKey: string, prompt: string): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
     const response = await firstValueFrom(
       this.httpService.post('https://api.openai.com/v1/chat/completions', {
         model,
@@ -905,10 +946,11 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
         temperature: 0.2, max_tokens: 8192,
       }, { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 120000 }),
     );
-    return { content: response.data.choices[0].message.content };
+    const usage = response.data.usage;
+    return { content: response.data.choices[0].message.content, inputTokens: usage?.prompt_tokens ?? 0, outputTokens: usage?.completion_tokens ?? 0 };
   }
 
-  private async callAnthropic(model: string, apiKey: string, prompt: string): Promise<{ content: string }> {
+  private async callAnthropic(model: string, apiKey: string, prompt: string): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
     const response = await firstValueFrom(
       this.httpService.post('https://api.anthropic.com/v1/messages', {
         model, max_tokens: 8192,
@@ -919,10 +961,11 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
         timeout: 120000,
       }),
     );
-    return { content: response.data.content[0].text };
+    const usage = response.data.usage;
+    return { content: response.data.content[0].text, inputTokens: usage?.input_tokens ?? 0, outputTokens: usage?.output_tokens ?? 0 };
   }
 
-  private async callGemini(model: string, apiKey: string, prompt: string): Promise<{ content: string }> {
+  private async callGemini(model: string, apiKey: string, prompt: string): Promise<{ content: string; inputTokens: number; outputTokens: number }> {
     const response = await firstValueFrom(
       this.httpService.post(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -934,7 +977,8 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
         { headers: { 'Content-Type': 'application/json' }, timeout: 120000 },
       ),
     );
-    return { content: response.data.candidates[0].content.parts[0].text };
+    const meta = response.data.usageMetadata;
+    return { content: response.data.candidates[0].content.parts[0].text, inputTokens: meta?.promptTokenCount ?? 0, outputTokens: meta?.candidatesTokenCount ?? 0 };
   }
 
   private extractScript(rawResponse: string): string {

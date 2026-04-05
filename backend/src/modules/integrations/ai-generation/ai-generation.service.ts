@@ -8,7 +8,7 @@ import { SettingsService, AiProvider } from '@/modules/settings/settings.service
 import { TestCase } from '@/modules/test-cases/entities/test-case.entity';
 import { JiraSyncStatus, Priority, TestType } from '@/modules/test-cases/entities/test-case.enums';
 import { SaveGeneratedTestCasesDto } from '../jira/dto/save-generated-test-cases.dto';
-import { AiAuditLog } from './entities/ai-audit-log.entity';
+import { AiAuditService } from '@/common/modules/ai-audit';
 
 interface AiProviderResult {
   content: string;
@@ -36,7 +36,7 @@ export class AiGenerationService {
     private readonly settingsService: SettingsService,
     private readonly httpService: HttpService,
     @InjectRepository(TestCase) private readonly testCaseRepo: Repository<TestCase>,
-    @InjectRepository(AiAuditLog) private readonly auditLogRepo: Repository<AiAuditLog>,
+    private readonly aiAuditService: AiAuditService,
   ) {}
 
   async generateFromJira(orgId: string, userId: string, jiraIssueKey: string) {
@@ -79,8 +79,7 @@ export class AiGenerationService {
     } catch (error: any) {
       success = false;
       errorMessage = error.message;
-      // Log failed attempt
-      await this.logAudit({ userId, orgId, provider, model, jiraIssueKey, inputTokens: 0, outputTokens: 0, responseTimeMs: Date.now() - startTime, testCasesGenerated: 0, success: false, errorMessage });
+      this.aiAuditService.log({ userId, orgId, feature: 'test_generation', action: 'generate_from_jira', provider, model, inputTokens: 0, outputTokens: 0, responseTimeMs: Date.now() - startTime, success: false, errorMessage, metadata: { jiraIssueKey } });
       throw error;
     }
 
@@ -91,7 +90,7 @@ export class AiGenerationService {
     testCasesGenerated = generatedTestCases.length;
 
     // 7. Log audit
-    await this.logAudit({ userId, orgId, provider, model, jiraIssueKey, inputTokens: aiResult.inputTokens, outputTokens: aiResult.outputTokens, responseTimeMs, testCasesGenerated, success: true, errorMessage: null });
+    this.aiAuditService.log({ userId, orgId, feature: 'test_generation', action: 'generate_from_jira', provider, model, inputTokens: aiResult.inputTokens, outputTokens: aiResult.outputTokens, responseTimeMs, success: true, metadata: { jiraIssueKey, testCasesGenerated } });
 
     return { jiraIssue, generatedTestCases };
   }
@@ -160,22 +159,7 @@ export class AiGenerationService {
   }
 
   async getAuditLogs(orgId: string, limit = 50, offset = 0) {
-    const [logs, total] = await this.auditLogRepo.findAndCount({
-      where: { orgId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
-    return { logs, total };
-  }
-
-  private async logAudit(data: Omit<AiAuditLog, 'id' | 'createdAt'>) {
-    try {
-      const entry = this.auditLogRepo.create(data);
-      await this.auditLogRepo.save(entry);
-    } catch (err) {
-      this.logger.error('Failed to save AI audit log', (err as Error).message);
-    }
+    return this.aiAuditService.findAll({ orgId, limit, offset });
   }
 
   private buildPrompt(jiraIssue: { summary: string; description: string; labels: string[]; priority?: string }) {

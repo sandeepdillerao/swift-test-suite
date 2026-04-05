@@ -4,13 +4,14 @@ import { HttpModule } from '@nestjs/axios';
 import { AutomationScript } from './entities/automation-script.entity';
 import { ScriptExecution } from './entities/script-execution.entity';
 import { TestCase } from '@/modules/test-cases/entities/test-case.entity';
+import { User } from '@/modules/users/entities/user.entity';
 import { SettingsModule } from '@/modules/settings/settings.module';
 import { AutomationService } from './automation.service';
 import { AutomationController } from './automation.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AutomationScript, ScriptExecution, TestCase]),
+    TypeOrmModule.forFeature([AutomationScript, ScriptExecution, TestCase, User]),
     HttpModule,
     SettingsModule,
   ],

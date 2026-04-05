@@ -24,6 +24,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { AiAuditModule } from './common/modules/ai-audit';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { AutomationModule } from './modules/automation/automation.module';
     SettingsModule,
     IntegrationsModule,
     AutomationModule,
+    AiAuditModule,
   ],
   providers: [
     {
