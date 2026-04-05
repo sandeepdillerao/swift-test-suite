@@ -1,6 +1,14 @@
-import { IsArray, IsEnum, IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsArray, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Length, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { Priority, TestType } from '../entities/test-case.enums';
+
+export class TestStepDto {
+  @ApiProperty() @IsString() id: string;
+  @ApiProperty() @IsNumber() @Type(() => Number) order: number;
+  @ApiProperty() @IsString() action: string;
+  @ApiProperty() @IsString() expectedResult: string;
+}
 
 export class CreateTestCaseDto {
   @ApiProperty() @IsString() @Length(1, 500) title: string;
@@ -9,7 +17,7 @@ export class CreateTestCaseDto {
   @ApiProperty() @IsUUID() projectId: string;
   @ApiProperty() @IsUUID() suiteId: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() assignedTo?: string;
-  @ApiPropertyOptional() @IsOptional() @IsArray() steps?: any[];
+  @ApiPropertyOptional({ type: [TestStepDto] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => TestStepDto) steps?: TestStepDto[];
   @ApiProperty() @IsString() expectedResult: string;
   @ApiPropertyOptional({ enum: Priority }) @IsOptional() @IsEnum(Priority) priority?: Priority;
   @ApiPropertyOptional({ enum: TestType }) @IsOptional() @IsEnum(TestType) type?: TestType;

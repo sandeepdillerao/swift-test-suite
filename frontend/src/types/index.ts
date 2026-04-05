@@ -161,6 +161,58 @@ export interface ActivityItem {
   timestamp: string;
 }
 
+// Automation types
+export type ScriptStatus = 'draft' | 'ready' | 'running' | 'passed' | 'failed' | 'error';
+export type ExecutionStatus = 'queued' | 'running' | 'passed' | 'failed' | 'error' | 'healed';
+export type BrowserType = 'chromium' | 'firefox' | 'webkit';
+export type ScriptSource = 'ai_generated' | 'codegen' | 'manual';
+
+export interface AutomationScript {
+  id: string;
+  testCaseId: string;
+  projectId: string;
+  name: string;
+  rawScript: string | null;
+  cleanScript: string | null;
+  healedScript: string | null;
+  activeScript: string | null;
+  targetUrl: string | null;
+  status: ScriptStatus;
+  source: ScriptSource;
+  browserType: BrowserType;
+  stabilityScore: number;
+  healingAttempts: number;
+  maxHealingAttempts: number;
+  totalRuns: number;
+  passedRuns: number;
+  lastRunAt: string | null;
+  lastRunDuration: number | null;
+  metadata: Record<string, any>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScriptExecution {
+  id: string;
+  scriptId: string;
+  testCaseId: string;
+  status: ExecutionStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  duration: number | null;
+  logs: string | null;
+  errorMessage: string | null;
+  screenshots: string[];
+  videoPath: string | null;
+  healingApplied: boolean;
+  healingDetails: Record<string, any> | null;
+  browserType: BrowserType;
+  scriptSnapshot: string | null;
+  executedBy: string;
+  createdAt: string;
+}
+
 // Export format types
 export interface TestCaseExport {
   id: string;

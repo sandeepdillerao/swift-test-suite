@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/separator';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { TestCaseDialog } from '@/components/testcases/TestCaseDialog';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
+import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { useTestCase, useUpdateTestCase, useDeleteTestCase } from '@/hooks/useTestCases';
 import { useTestSuites } from '@/hooks/useTestSuites';
 import { useProjectStore } from '@/stores/projectStore';
@@ -202,6 +203,15 @@ export const TestCaseDetail = () => {
               </p>
             </CardContent>
           </Card>
+
+          {/* Automation */}
+          {projectId && (
+            <AutomationPanel
+              testCaseId={testCase.id}
+              projectId={projectId}
+              testCaseHasSteps={testCase.steps.length > 0}
+            />
+          )}
         </div>
 
         {/* Sidebar */}

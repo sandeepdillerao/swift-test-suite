@@ -19,6 +19,7 @@ import { releasesService } from './modules/releases.service';
 import { dashboardService } from './modules/dashboard.service';
 import { settingsService } from './modules/settings.service';
 import { integrationsService } from './modules/integrations.service';
+import { automationService } from './modules/automation.service';
 import type { Project, TestCase, TestRun, TestRunCase, Release } from '@/types';
 
 export const api = {
@@ -124,6 +125,20 @@ export const api = {
     saveGeneratedTestCases: integrationsService.saveGeneratedTestCases,
   },
 
+  // ── Automation ──────────────────────────────────────────────────────────────
+  automation: {
+    generate: automationService.generate,
+    importCodegen: automationService.importCodegen,
+    getByTestCase: (testCaseId: string) => automationService.getByTestCase(testCaseId),
+    get: (id: string) => automationService.get(id),
+    update: automationService.update,
+    delete: automationService.delete,
+    execute: automationService.execute,
+    getExecutions: automationService.getExecutions,
+    getExecutionsByTestCase: automationService.getExecutionsByTestCase,
+    getExecution: automationService.getExecution,
+  },
+
   // ── Users ─────────────────────────────────────────────────────────────────────
   users: {
     list: (params?: Parameters<typeof usersService.list>[0]) => usersService.list(params),
@@ -151,5 +166,6 @@ export { releasesService } from './modules/releases.service';
 export { dashboardService } from './modules/dashboard.service';
 export { settingsService } from './modules/settings.service';
 export { integrationsService } from './modules/integrations.service';
+export { automationService } from './modules/automation.service';
 export { httpClient } from './http-client';
 export type { ApiError } from './http-client';

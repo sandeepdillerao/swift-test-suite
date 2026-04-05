@@ -1,6 +1,8 @@
-import { IsArray, IsEnum, IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsString, IsUUID, Length, ValidateNested } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { JiraSyncStatus, Priority, TestStatus, TestType } from '../entities/test-case.enums';
+import { TestStepDto } from './create-test-case.dto';
 
 export class UpdateTestCaseDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @Length(1, 500) title?: string;
@@ -8,7 +10,7 @@ export class UpdateTestCaseDto {
   @ApiPropertyOptional() @IsOptional() @IsString() preconditions?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() suiteId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() assignedTo?: string;
-  @ApiPropertyOptional() @IsOptional() @IsArray() steps?: any[];
+  @ApiPropertyOptional({ type: [TestStepDto] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => TestStepDto) steps?: TestStepDto[];
   @ApiPropertyOptional() @IsOptional() @IsString() expectedResult?: string;
   @ApiPropertyOptional({ enum: Priority }) @IsOptional() @IsEnum(Priority) priority?: Priority;
   @ApiPropertyOptional({ enum: TestType }) @IsOptional() @IsEnum(TestType) type?: TestType;

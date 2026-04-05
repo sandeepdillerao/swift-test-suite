@@ -23,6 +23,7 @@ import { ReleasesModule } from './modules/releases/releases.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     DashboardModule,
     SettingsModule,
     IntegrationsModule,
+    AutomationModule,
   ],
   providers: [
     {
