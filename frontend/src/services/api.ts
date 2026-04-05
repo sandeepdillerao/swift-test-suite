@@ -127,6 +127,12 @@ export const api = {
 
   // ── Automation ──────────────────────────────────────────────────────────────
   automation: {
+    // Codegen recording
+    startCodegen: automationService.startCodegen,
+    getCodegenStatus: automationService.getCodegenStatus,
+    stopCodegen: automationService.stopCodegen,
+    completeCodegen: automationService.completeCodegen,
+    // Script generation
     generate: automationService.generate,
     importCodegen: automationService.importCodegen,
     getByTestCase: (testCaseId: string) => automationService.getByTestCase(testCaseId),
@@ -134,6 +140,7 @@ export const api = {
     update: automationService.update,
     delete: automationService.delete,
     execute: automationService.execute,
+    cancelExecution: automationService.cancelExecution,
     getExecutions: automationService.getExecutions,
     getExecutionsByTestCase: automationService.getExecutionsByTestCase,
     getExecution: automationService.getExecution,

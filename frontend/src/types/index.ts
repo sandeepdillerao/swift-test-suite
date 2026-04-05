@@ -213,6 +213,34 @@ export interface ScriptExecution {
   createdAt: string;
 }
 
+export interface StructuredLogs {
+  summary: {
+    passed: boolean;
+    duration: string;
+    totalTests: number;
+    passedTests: number;
+    failedTests: number;
+    skippedTests: number;
+  };
+  steps: Array<{
+    name: string;
+    status: 'passed' | 'failed' | 'skipped';
+    duration: string;
+    error?: string;
+    snippet?: string;
+    location?: string;
+    actions?: Array<{
+      title: string;
+      status: 'passed' | 'failed';
+      duration: string;
+      error?: string;
+    }>;
+  }>;
+  error: string | null;
+  stdout: string | null;
+  stderr: string | null;
+}
+
 // Export format types
 export interface TestCaseExport {
   id: string;

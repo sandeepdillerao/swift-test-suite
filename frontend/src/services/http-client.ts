@@ -73,10 +73,16 @@ httpClient.interceptors.request.use(
 
 httpClient.interceptors.response.use(
   (response) => {
-    // Unwrap { success, data, timestamp } envelope
-    const envelope = response.data as ApiEnvelope;
-    if (envelope && typeof envelope === 'object' && 'success' in envelope) {
-      response.data = envelope.data;
+    // Unwrap { success, data, timestamp } envelope — skip for blob/arraybuffer responses
+    const data = response.data;
+    if (
+      data &&
+      typeof data === 'object' &&
+      !(data instanceof Blob) &&
+      !(data instanceof ArrayBuffer) &&
+      'success' in data
+    ) {
+      response.data = (data as ApiEnvelope).data;
     }
     return response;
   },

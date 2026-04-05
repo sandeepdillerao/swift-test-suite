@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { spawn } from 'child_process';
+import { ChildProcess, spawn } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
 import { AutomationScript } from './entities/automation-script.entity';
 import { ScriptExecution } from './entities/script-execution.entity';
@@ -17,10 +17,34 @@ import { SettingsService, AiProvider } from '@/modules/settings/settings.service
 import { GenerateScriptDto, ImportCodegenScriptDto } from './dto/generate-script.dto';
 import { UpdateScriptDto } from './dto/update-script.dto';
 import { ExecuteScriptDto } from './dto/execute-script.dto';
+import { StartCodegenDto } from './dto/codegen-session.dto';
+
+/** Codegen session tracked in memory */
+interface CodegenSession {
+  id: string;
+  userId: string;
+  testCaseId: string;
+  projectId: string;
+  targetUrl?: string;
+  browserType: BrowserType;
+  status: 'recording' | 'completed' | 'failed' | 'cancelled';
+  recordedScript: string | null;
+  outputFile: string;
+  process: ChildProcess | null;
+  startedAt: Date;
+  completedAt: Date | null;
+  error: string | null;
+}
+
+/** Persistent storage root for execution artifacts */
+const ARTIFACTS_ROOT = path.resolve(process.cwd(), 'uploads', 'automation');
 
 @Injectable()
 export class AutomationService {
   private readonly logger = new Logger(AutomationService.name);
+  private readonly codegenSessions = new Map<string, CodegenSession>();
+  /** Track running Playwright processes by execution ID for cancellation */
+  private readonly runningProcesses = new Map<string, ChildProcess>();
 
   constructor(
     @InjectRepository(AutomationScript) private readonly scriptRepo: Repository<AutomationScript>,
@@ -28,9 +52,176 @@ export class AutomationService {
     @InjectRepository(TestCase) private readonly testCaseRepo: Repository<TestCase>,
     private readonly settingsService: SettingsService,
     private readonly httpService: HttpService,
-  ) {}
+  ) {
+    // Ensure artifacts directory exists on startup
+    fs.mkdirSync(ARTIFACTS_ROOT, { recursive: true });
+  }
 
-  // ─── Script Generation ───────────────────────────────────────────────────────
+  // ─── Codegen Session Management ───────────────────────────────────────────
+
+  async startCodegen(userId: string, dto: StartCodegenDto): Promise<{ sessionId: string; status: string }> {
+    const testCase = await this.testCaseRepo.findOne({ where: { id: dto.testCaseId } });
+    if (!testCase) throw new NotFoundException('Test case not found');
+
+    const sessionId = uuidv4();
+    const outputFile = path.join(os.tmpdir(), `codegen-${sessionId}.ts`);
+
+    // Resolve playwright binary
+    const backendRoot = path.resolve(__dirname, '..', '..', '..');
+    let nodeModulesPath = path.join(backendRoot, 'node_modules');
+    if (!fs.existsSync(path.join(nodeModulesPath, '@playwright', 'test'))) {
+      const workspaceRoot = path.resolve(backendRoot, '..');
+      if (fs.existsSync(path.join(workspaceRoot, 'node_modules', '@playwright', 'test'))) {
+        nodeModulesPath = path.join(workspaceRoot, 'node_modules');
+      }
+    }
+    const playwrightBin = path.join(nodeModulesPath, '.bin', 'playwright');
+
+    const url = dto.targetUrl || 'http://localhost:3000';
+    const browser = dto.browserType || BrowserType.CHROMIUM;
+
+    const session: CodegenSession = {
+      id: sessionId,
+      userId,
+      testCaseId: dto.testCaseId,
+      projectId: dto.projectId,
+      targetUrl: dto.targetUrl,
+      browserType: browser,
+      status: 'recording',
+      recordedScript: null,
+      outputFile,
+      process: null,
+      startedAt: new Date(),
+      completedAt: null,
+      error: null,
+    };
+
+    // Spawn playwright codegen — opens a browser on the user's machine
+    const args = ['codegen', '--output', outputFile, '--browser', browser, url];
+    this.logger.log(`Starting codegen session ${sessionId}: ${playwrightBin} ${args.join(' ')}`);
+
+    const proc = spawn(playwrightBin, args, {
+      shell: true,
+      env: { ...process.env, NODE_PATH: nodeModulesPath },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    session.process = proc;
+    this.codegenSessions.set(sessionId, session);
+
+    let stderr = '';
+    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      const s = this.codegenSessions.get(sessionId);
+      if (!s || s.status === 'cancelled') return;
+
+      if (code === 0 && fs.existsSync(outputFile)) {
+        try {
+          s.recordedScript = fs.readFileSync(outputFile, 'utf-8');
+          s.status = 'completed';
+          this.logger.log(`Codegen session ${sessionId} completed — ${s.recordedScript.length} chars recorded`);
+        } catch (err) {
+          s.status = 'failed';
+          s.error = `Failed to read output file: ${(err as Error).message}`;
+        }
+      } else {
+        s.status = code === null ? 'failed' : (code === 0 ? 'completed' : 'failed');
+        s.error = stderr.trim() || `Codegen process exited with code ${code}`;
+        // Still try to read partial output
+        if (fs.existsSync(outputFile)) {
+          try { s.recordedScript = fs.readFileSync(outputFile, 'utf-8'); s.status = 'completed'; } catch { /* ignore */ }
+        }
+      }
+      s.completedAt = new Date();
+      s.process = null;
+
+      // Clean up output file
+      try { fs.unlinkSync(outputFile); } catch { /* ignore */ }
+    });
+
+    proc.on('error', (err) => {
+      const s = this.codegenSessions.get(sessionId);
+      if (!s) return;
+      s.status = 'failed';
+      s.error = err.message;
+      s.completedAt = new Date();
+      s.process = null;
+    });
+
+    return { sessionId, status: 'recording' };
+  }
+
+  getCodegenStatus(sessionId: string): {
+    sessionId: string;
+    status: string;
+    recordedScript: string | null;
+    error: string | null;
+    startedAt: string;
+    completedAt: string | null;
+  } {
+    const session = this.codegenSessions.get(sessionId);
+    if (!session) throw new NotFoundException('Codegen session not found');
+
+    return {
+      sessionId: session.id,
+      status: session.status,
+      recordedScript: session.recordedScript,
+      error: session.error,
+      startedAt: session.startedAt.toISOString(),
+      completedAt: session.completedAt?.toISOString() || null,
+    };
+  }
+
+  stopCodegen(sessionId: string): { status: string } {
+    const session = this.codegenSessions.get(sessionId);
+    if (!session) throw new NotFoundException('Codegen session not found');
+
+    if (session.process) {
+      session.status = 'cancelled';
+      session.process.kill('SIGTERM');
+      session.process = null;
+      session.completedAt = new Date();
+
+      // Try to read partial output
+      if (fs.existsSync(session.outputFile)) {
+        try {
+          session.recordedScript = fs.readFileSync(session.outputFile, 'utf-8');
+          if (session.recordedScript.trim()) session.status = 'completed';
+        } catch { /* ignore */ }
+        try { fs.unlinkSync(session.outputFile); } catch { /* ignore */ }
+      }
+    }
+
+    return { status: session.status };
+  }
+
+  /**
+   * Complete codegen-first flow: take recorded script from session, feed to AI
+   * with test case + Jira context, and save the generated automation script.
+   */
+  async completeCodegenFlow(userId: string, sessionId: string): Promise<AutomationScript> {
+    const session = this.codegenSessions.get(sessionId);
+    if (!session) throw new NotFoundException('Codegen session not found');
+    if (!session.recordedScript?.trim()) {
+      throw new BadRequestException('No codegen recording found. Record some actions first.');
+    }
+
+    const result = await this.generateScript(userId, {
+      testCaseId: session.testCaseId,
+      projectId: session.projectId,
+      targetUrl: session.targetUrl,
+      browserType: session.browserType,
+      codegenScript: session.recordedScript,
+    });
+
+    // Clean up session after successful generation
+    this.codegenSessions.delete(sessionId);
+
+    return result;
+  }
+
+  // ─── Codegen-First Generation (Codegen + Test Case + Jira → AI) ──────────
 
   async generateScript(userId: string, dto: GenerateScriptDto): Promise<AutomationScript> {
     const testCase = await this.testCaseRepo.findOne({ where: { id: dto.testCaseId } });
@@ -40,34 +231,29 @@ export class AutomationService {
       throw new BadRequestException('Test case has no steps defined. Add steps before generating an automation script.');
     }
 
-    // Get AI settings
-    const allSettings = await this.settingsService.getAll(userId);
-    const provider = allSettings.ai.activeProvider as AiProvider;
-    const model = allSettings.ai.activeModel;
-    const apiKey = await this.settingsService.getApiKey(userId, provider);
-    if (!apiKey) {
-      throw new BadRequestException(`No API key configured for ${provider}. Add your key in Settings.`);
-    }
+    const { provider, model, apiKey } = await this.getAiCredentials(userId);
 
-    // Build prompt for Playwright script generation
-    const prompt = this.buildGeneratePrompt(testCase, dto.targetUrl);
+    // Build the prompt — if codegen is provided, use the enhanced codegen-first flow
+    const prompt = dto.codegenScript
+      ? this.buildCodegenEnhancedPrompt(testCase, dto.codegenScript, dto.targetUrl)
+      : this.buildGeneratePrompt(testCase, dto.targetUrl);
+
     const aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
     const cleanScript = this.extractScript(aiResult.content);
 
-    // Create script entity
     const script = this.scriptRepo.create({
       testCaseId: dto.testCaseId,
       projectId: dto.projectId,
       name: `${testCase.tcId} - ${testCase.title}`,
-      rawScript: null,
+      rawScript: dto.codegenScript || null,
       cleanScript,
       healedScript: null,
       activeScript: cleanScript,
       targetUrl: dto.targetUrl || null,
       status: ScriptStatus.READY,
-      source: ScriptSource.AI_GENERATED,
+      source: dto.codegenScript ? ScriptSource.CODEGEN : ScriptSource.AI_GENERATED,
       browserType: dto.browserType || BrowserType.CHROMIUM,
-      stabilityScore: 70,
+      stabilityScore: dto.codegenScript ? 80 : 70, // Codegen-based gets higher initial score
       createdBy: userId,
     });
 
@@ -78,21 +264,14 @@ export class AutomationService {
     const testCase = await this.testCaseRepo.findOne({ where: { id: dto.testCaseId } });
     if (!testCase) throw new NotFoundException('Test case not found');
 
-    // Get AI to refactor the raw codegen output
-    const allSettings = await this.settingsService.getAll(userId);
-    const provider = allSettings.ai.activeProvider as AiProvider;
-    const model = allSettings.ai.activeModel;
-    const apiKey = await this.settingsService.getApiKey(userId, provider);
-
     let cleanScript = dto.rawScript;
-    if (apiKey) {
-      try {
-        const prompt = this.buildRefactorPrompt(dto.rawScript, testCase);
-        const aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
-        cleanScript = this.extractScript(aiResult.content);
-      } catch (err) {
-        this.logger.warn(`AI refactor failed, using raw script: ${(err as Error).message}`);
-      }
+    try {
+      const { provider, model, apiKey } = await this.getAiCredentials(userId);
+      const prompt = this.buildCodegenEnhancedPrompt(testCase, dto.rawScript, dto.targetUrl);
+      const aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+      cleanScript = this.extractScript(aiResult.content);
+    } catch (err) {
+      this.logger.warn(`AI refactor failed, using raw script: ${(err as Error).message}`);
     }
 
     const script = this.scriptRepo.create({
@@ -107,7 +286,7 @@ export class AutomationService {
       status: ScriptStatus.READY,
       source: ScriptSource.CODEGEN,
       browserType: dto.browserType || BrowserType.CHROMIUM,
-      stabilityScore: 60,
+      stabilityScore: 80,
       createdBy: userId,
     });
 
@@ -123,7 +302,6 @@ export class AutomationService {
     const scriptToRun = script.activeScript || script.cleanScript;
     if (!scriptToRun) throw new BadRequestException('No script content available to execute.');
 
-    // Create execution record
     const execution = this.executionRepo.create({
       scriptId: script.id,
       testCaseId: script.testCaseId,
@@ -135,7 +313,6 @@ export class AutomationService {
     });
     const savedExecution = await this.executionRepo.save(execution);
 
-    // Update script status
     await this.scriptRepo.update(script.id, { status: ScriptStatus.RUNNING });
 
     // Run async — don't block the response
@@ -154,11 +331,15 @@ export class AutomationService {
     const startTime = Date.now();
     const tmpDir = path.join(os.tmpdir(), `pw-${execution.id}`);
     const scriptPath = path.join(tmpDir, 'test.spec.ts');
-    const resultsDir = path.join(tmpDir, 'results');
+    const testResultsDir = path.join(tmpDir, 'test-results');
+    const resultsJsonPath = path.join(tmpDir, 'results.json');
+
+    // Persistent artifact dir for this execution
+    const artifactDir = path.join(ARTIFACTS_ROOT, execution.id);
 
     try {
       fs.mkdirSync(tmpDir, { recursive: true });
-      fs.mkdirSync(resultsDir, { recursive: true });
+      fs.mkdirSync(artifactDir, { recursive: true });
 
       // Inject target URL override if provided
       let scriptContent = execution.scriptSnapshot!;
@@ -167,22 +348,17 @@ export class AutomationService {
         scriptContent = `// Target URL: ${targetUrl}\n${scriptContent}`;
       }
 
-      fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
-
-      // Resolve node_modules — in a monorepo, packages hoist to the workspace root
-      // __dirname at runtime = dist/modules/automation, so go up 3 levels to backend root
+      // Resolve node_modules
       const backendRoot = path.resolve(__dirname, '..', '..', '..');
       let nodeModulesPath = path.join(backendRoot, 'node_modules');
-      // If @playwright/test isn't in backend/node_modules, try the workspace root
       if (!fs.existsSync(path.join(nodeModulesPath, '@playwright', 'test'))) {
         const workspaceRoot = path.resolve(backendRoot, '..');
         if (fs.existsSync(path.join(workspaceRoot, 'node_modules', '@playwright', 'test'))) {
           nodeModulesPath = path.join(workspaceRoot, 'node_modules');
         }
       }
-      this.logger.debug(`Using node_modules at: ${nodeModulesPath}`);
 
-      // Write playwright config using require() (CommonJS) for compatibility
+      // Write playwright config — always record video + screenshots
       const configPath = path.join(tmpDir, 'playwright.config.ts');
       const headless = dto.headless !== false;
       const browser = dto.browserType || script.browserType || 'chromium';
@@ -193,12 +369,13 @@ module.exports = defineConfig({
   testDir: '.',
   timeout: 60000,
   retries: 0,
-  reporter: [['json', { outputFile: '${path.join(resultsDir, 'results.json').replace(/\\/g, '/')}' }]],
+  reporter: [['json', { outputFile: '${resultsJsonPath.replace(/\\/g, '/')}' }]],
+  outputDir: '${testResultsDir.replace(/\\/g, '/')}',
   use: {
     headless: ${headless},
     screenshot: 'on',
-    video: 'retain-on-failure',
-    trace: 'retain-on-failure',
+    video: 'on',
+    trace: 'on',
     ${targetUrl ? `baseURL: '${targetUrl}',` : ''}
   },
   projects: [{ name: '${browser}', use: { browserName: '${browser}' } }],
@@ -207,48 +384,44 @@ module.exports = defineConfig({
         'utf-8',
       );
 
-      // Also rewrite the test script imports from ESM to CJS for the temp environment
+      // Rewrite ESM → CJS for the temp environment
       const cjsScriptContent = scriptContent
         .replace(/import\s*\{([^}]+)\}\s*from\s*['"]@playwright\/test['"]/g, 'const {$1} = require("@playwright/test")')
         .replace(/import\s+(\w+)\s+from\s*['"]@playwright\/test['"]/g, 'const $1 = require("@playwright/test")');
       fs.writeFileSync(scriptPath, cjsScriptContent, 'utf-8');
 
-      // Execute playwright with NODE_PATH pointing to backend's node_modules
-      const { stdout, stderr, exitCode } = await this.spawnPlaywright(tmpDir, nodeModulesPath);
+      // Execute playwright (track process for cancellation)
+      const playwrightBin = path.join(nodeModulesPath, '.bin', 'playwright');
+      const { stdout, stderr, exitCode } = await this.spawnPlaywright(playwrightBin, tmpDir, nodeModulesPath, execution.id);
       const duration = Date.now() - startTime;
 
-      // Collect screenshots
+      // ─── Collect & persist artifacts ──────────────────────────────────
       const screenshots: string[] = [];
-      if (fs.existsSync(resultsDir)) {
-        const files = fs.readdirSync(resultsDir, { recursive: true }) as string[];
-        for (const f of files) {
-          const filePath = typeof f === 'string' ? f : '';
-          if (filePath.endsWith('.png') || filePath.endsWith('.jpg')) {
-            screenshots.push(filePath);
-          }
-        }
+      let videoPath: string | null = null;
+      let tracePath: string | null = null;
+
+      if (fs.existsSync(testResultsDir)) {
+        this.collectArtifacts(testResultsDir, artifactDir, screenshots, (v) => { videoPath = v; }, (t) => { tracePath = t; });
       }
 
-      // Parse results
-      let resultData: any = null;
-      const resultsJsonPath = path.join(resultsDir, 'results.json');
+      // ─── Parse structured results ────────────────────────────────────
+      let resultJson: any = null;
       if (fs.existsSync(resultsJsonPath)) {
-        try {
-          resultData = JSON.parse(fs.readFileSync(resultsJsonPath, 'utf-8'));
-        } catch { /* ignore parse errors */ }
+        try { resultJson = JSON.parse(fs.readFileSync(resultsJsonPath, 'utf-8')); } catch { /* ignore */ }
       }
 
       const passed = exitCode === 0;
-      const logs = `--- STDOUT ---\n${stdout}\n\n--- STDERR ---\n${stderr}`;
+      const structuredLogs = this.buildStructuredLogs(stdout, stderr, resultJson, passed, duration);
 
       // Update execution
       await this.executionRepo.update(execution.id, {
         status: passed ? ExecutionStatus.PASSED : ExecutionStatus.FAILED,
         completedAt: new Date(),
         duration,
-        logs,
-        errorMessage: passed ? null : this.extractErrorMessage(stderr, stdout),
+        logs: JSON.stringify(structuredLogs),
+        errorMessage: passed ? null : structuredLogs.error,
         screenshots,
+        videoPath,
       });
 
       // Update script stats
@@ -265,7 +438,7 @@ module.exports = defineConfig({
         stabilityScore,
       });
 
-      // Update test case status based on result
+      // Update test case status
       await this.testCaseRepo.update(script.testCaseId, {
         status: passed ? TestStatus.PASSED : TestStatus.FAILED,
         lastRunAt: new Date(),
@@ -273,54 +446,219 @@ module.exports = defineConfig({
 
       // Self-healing on failure
       if (!passed && dto.enableHealing !== false && script.healingAttempts < script.maxHealingAttempts) {
-        await this.attemptHealing(script, execution, stderr + stdout);
+        await this.attemptHealing(script, execution, structuredLogs.error || stderr + stdout);
       }
     } catch (err: any) {
       const duration = Date.now() - startTime;
+      const structuredLogs = this.buildStructuredLogs('', err.stack || err.message, null, false, duration);
       await this.executionRepo.update(execution.id, {
         status: ExecutionStatus.ERROR,
         completedAt: new Date(),
         duration,
         errorMessage: err.message,
-        logs: err.stack || err.message,
+        logs: JSON.stringify(structuredLogs),
       });
       await this.scriptRepo.update(script.id, { status: ScriptStatus.ERROR });
     } finally {
-      // Cleanup temp files
-      try {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      } catch { /* ignore cleanup errors */ }
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   }
 
-  private spawnPlaywright(cwd: string, nodeModulesPath: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  /** Walk the test-results dir, copy screenshots/video/trace to artifact dir */
+  private collectArtifacts(
+    srcDir: string,
+    destDir: string,
+    screenshots: string[],
+    setVideo: (p: string) => void,
+    setTrace: (p: string) => void,
+  ) {
+    const walkDir = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walkDir(fullPath); continue; }
+
+        const ext = entry.name.toLowerCase();
+        if (ext.endsWith('.png') || ext.endsWith('.jpg') || ext.endsWith('.jpeg')) {
+          const dest = path.join(destDir, `screenshot-${screenshots.length + 1}${path.extname(entry.name)}`);
+          fs.copyFileSync(fullPath, dest);
+          screenshots.push(`screenshot-${screenshots.length + 1}${path.extname(entry.name)}`);
+        } else if (ext.endsWith('.webm') || ext.endsWith('.mp4')) {
+          const dest = path.join(destDir, `video${path.extname(entry.name)}`);
+          fs.copyFileSync(fullPath, dest);
+          setVideo(`video${path.extname(entry.name)}`);
+        } else if (ext.endsWith('.zip') && entry.name.includes('trace')) {
+          const dest = path.join(destDir, 'trace.zip');
+          fs.copyFileSync(fullPath, dest);
+          setTrace('trace.zip');
+        }
+      }
+    };
+    try { walkDir(srcDir); } catch (err) {
+      this.logger.warn(`Artifact collection error: ${(err as Error).message}`);
+    }
+  }
+
+  /** Build structured, human-readable log object from raw output */
+  private buildStructuredLogs(stdout: string, stderr: string, resultJson: any, passed: boolean, durationMs: number) {
+    const summary = {
+      passed,
+      duration: `${(durationMs / 1000).toFixed(1)}s`,
+      totalTests: 0,
+      passedTests: 0,
+      failedTests: 0,
+      skippedTests: 0,
+    };
+
+    const steps: Array<{
+      name: string;
+      status: 'passed' | 'failed' | 'skipped';
+      duration: string;
+      error?: string;
+      snippet?: string;
+      location?: string;
+      actions?: Array<{ title: string; status: 'passed' | 'failed'; duration: string; error?: string }>;
+    }> = [];
+    let error: string | null = null;
+
+    // Recursively traverse suites (Playwright nests suites inside suites for test.describe)
+    const processSuite = (suite: any) => {
+      // Process nested suites first
+      for (const childSuite of suite.suites || []) {
+        processSuite(childSuite);
+      }
+
+      // Process specs in this suite
+      for (const spec of suite.specs || []) {
+        for (const test of spec.tests || []) {
+          for (const result of test.results || []) {
+            summary.totalTests++;
+            const testPassed = result.status === 'passed' || result.status === 'expected';
+            const testFailed = result.status === 'failed' || result.status === 'timedOut' || result.status === 'unexpected';
+            if (testPassed) summary.passedTests++;
+            else if (testFailed) summary.failedTests++;
+            else summary.skippedTests++;
+
+            // Extract step-level actions from the result
+            const actions: Array<{ title: string; status: 'passed' | 'failed'; duration: string; error?: string }> = [];
+            const extractSteps = (resultSteps: any[]) => {
+              for (const s of resultSteps || []) {
+                // Skip internal/framework steps, show user-facing ones
+                if (s.category === 'hook' || s.category === 'fixture') continue;
+                actions.push({
+                  title: s.title || 'Unknown action',
+                  status: s.error ? 'failed' : 'passed',
+                  duration: `${((s.duration || 0) / 1000).toFixed(2)}s`,
+                  error: s.error?.message,
+                });
+                // Include nested steps (test.step() inside test.step())
+                if (s.steps?.length) extractSteps(s.steps);
+              }
+            };
+            extractSteps(result.steps);
+
+            const suiteName = suite.title ? `${suite.title} > ` : '';
+            const stepEntry: any = {
+              name: `${suiteName}${spec.title || 'Unknown test'}`,
+              status: testPassed ? 'passed' : testFailed ? 'failed' : 'skipped',
+              duration: `${((result.duration || 0) / 1000).toFixed(1)}s`,
+              actions,
+            };
+
+            if (testFailed && result.error) {
+              stepEntry.error = result.error.message || '';
+              stepEntry.snippet = result.error.snippet || '';
+              stepEntry.location = result.error.location
+                ? `${result.error.location.file}:${result.error.location.line}`
+                : '';
+              if (!error) error = result.error.message || 'Test failed';
+            }
+            steps.push(stepEntry);
+          }
+        }
+      }
+    };
+
+    if (resultJson?.suites) {
+      for (const suite of resultJson.suites) {
+        processSuite(suite);
+      }
+    }
+
+    // Fallback error extraction from raw output
+    if (!error && !passed) {
+      error = this.extractErrorMessage(stderr, stdout);
+    }
+
+    return {
+      summary,
+      steps,
+      error,
+      stdout: stdout.trim() || null,
+      stderr: stderr.trim() || null,
+    };
+  }
+
+  private spawnPlaywright(playwrightBin: string, cwd: string, nodeModulesPath: string, executionId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve) => {
-      // Use the playwright CLI directly from the backend's node_modules
-      const playwrightBin = path.join(nodeModulesPath, '.bin', 'playwright');
       const proc = spawn(playwrightBin, ['test', '--config=playwright.config.ts'], {
         cwd,
         shell: true,
         timeout: 120000,
-        env: {
-          ...process.env,
-          NODE_PATH: nodeModulesPath,
-        },
+        env: { ...process.env, NODE_PATH: nodeModulesPath },
       });
+
+      // Track the process for cancellation
+      if (executionId) this.runningProcesses.set(executionId, proc);
 
       let stdout = '';
       let stderr = '';
-
       proc.stdout.on('data', (data) => { stdout += data.toString(); });
       proc.stderr.on('data', (data) => { stderr += data.toString(); });
-
       proc.on('close', (code) => {
+        if (executionId) this.runningProcesses.delete(executionId);
         resolve({ stdout, stderr, exitCode: code ?? 1 });
       });
-
       proc.on('error', (err) => {
+        if (executionId) this.runningProcesses.delete(executionId);
         resolve({ stdout, stderr: stderr + '\n' + err.message, exitCode: 1 });
       });
     });
+  }
+
+  // ─── Cancel Execution ──────────────────────────────────────────────────────
+
+  async cancelExecution(executionId: string): Promise<void> {
+    const execution = await this.executionRepo.findOne({ where: { id: executionId } });
+    if (!execution) throw new NotFoundException('Execution not found');
+
+    if (execution.status !== ExecutionStatus.RUNNING) {
+      throw new BadRequestException('Only running executions can be cancelled');
+    }
+
+    // Kill the process if it's still running
+    const proc = this.runningProcesses.get(executionId);
+    if (proc) {
+      proc.kill('SIGTERM');
+      this.runningProcesses.delete(executionId);
+    }
+
+    // Update execution and script status
+    await this.executionRepo.update(executionId, {
+      status: ExecutionStatus.ERROR,
+      completedAt: new Date(),
+      duration: Date.now() - new Date(execution.startedAt!).getTime(),
+      errorMessage: 'Execution cancelled by user',
+      logs: JSON.stringify({
+        summary: { passed: false, duration: '0s', totalTests: 0, passedTests: 0, failedTests: 0, skippedTests: 0 },
+        steps: [],
+        error: 'Execution cancelled by user',
+        stdout: null,
+        stderr: null,
+      }),
+    });
+
+    await this.scriptRepo.update(execution.scriptId, { status: ScriptStatus.READY });
+    this.logger.log(`Execution ${executionId} cancelled`);
   }
 
   // ─── Self-Healing ────────────────────────────────────────────────────────────
@@ -330,20 +668,14 @@ module.exports = defineConfig({
     failedExecution: ScriptExecution,
     errorOutput: string,
   ): Promise<void> {
-    this.logger.log(`Attempting self-healing for script ${script.id} (attempt ${script.healingAttempts + 1}/${script.maxHealingAttempts})`);
+    this.logger.log(`Self-healing attempt ${script.healingAttempts + 1}/${script.maxHealingAttempts} for script ${script.id}`);
 
     try {
-      const allSettings = await this.settingsService.getAll(script.createdBy);
-      const provider = allSettings.ai.activeProvider as AiProvider;
-      const model = allSettings.ai.activeModel;
-      const apiKey = await this.settingsService.getApiKey(script.createdBy, provider);
-      if (!apiKey) return;
-
+      const { provider, model, apiKey } = await this.getAiCredentials(script.createdBy);
       const prompt = this.buildHealingPrompt(script.activeScript!, errorOutput);
       const aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
       const healedScript = this.extractScript(aiResult.content);
 
-      // Update script with healed version
       await this.scriptRepo.update(script.id, {
         healedScript,
         activeScript: healedScript,
@@ -351,7 +683,6 @@ module.exports = defineConfig({
         status: ScriptStatus.READY,
       });
 
-      // Update the execution with healing details
       await this.executionRepo.update(failedExecution.id, {
         healingApplied: true,
         healingDetails: {
@@ -364,18 +695,22 @@ module.exports = defineConfig({
 
       this.logger.log(`Self-healing applied for script ${script.id}`);
     } catch (err: any) {
-      this.logger.error(`Self-healing failed for script ${script.id}: ${err.message}`);
+      this.logger.error(`Self-healing failed: ${err.message}`);
       await this.scriptRepo.update(script.id, { healingAttempts: script.healingAttempts + 1 });
     }
+  }
+
+  // ─── Artifacts ───────────────────────────────────────────────────────────────
+
+  getArtifactPath(executionId: string, filename: string): string | null {
+    const filePath = path.join(ARTIFACTS_ROOT, executionId, filename);
+    return fs.existsSync(filePath) ? filePath : null;
   }
 
   // ─── CRUD ────────────────────────────────────────────────────────────────────
 
   async findByTestCase(testCaseId: string): Promise<AutomationScript[]> {
-    return this.scriptRepo.find({
-      where: { testCaseId },
-      order: { updatedAt: 'DESC' },
-    });
+    return this.scriptRepo.find({ where: { testCaseId }, order: { updatedAt: 'DESC' } });
   }
 
   async findById(id: string): Promise<AutomationScript> {
@@ -389,7 +724,7 @@ module.exports = defineConfig({
     if (dto.activeScript !== undefined) {
       script.activeScript = dto.activeScript;
       script.status = ScriptStatus.READY;
-      script.healingAttempts = 0; // Reset healing on manual edit
+      script.healingAttempts = 0;
     }
     if (dto.name !== undefined) script.name = dto.name;
     if (dto.targetUrl !== undefined) script.targetUrl = dto.targetUrl;
@@ -404,19 +739,11 @@ module.exports = defineConfig({
   }
 
   async getExecutions(scriptId: string, limit = 20): Promise<ScriptExecution[]> {
-    return this.executionRepo.find({
-      where: { scriptId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+    return this.executionRepo.find({ where: { scriptId }, order: { createdAt: 'DESC' }, take: limit });
   }
 
   async getExecutionsByTestCase(testCaseId: string, limit = 20): Promise<ScriptExecution[]> {
-    return this.executionRepo.find({
-      where: { testCaseId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+    return this.executionRepo.find({ where: { testCaseId }, order: { createdAt: 'DESC' }, take: limit });
   }
 
   async getExecution(id: string): Promise<ScriptExecution> {
@@ -425,7 +752,72 @@ module.exports = defineConfig({
     return exec;
   }
 
-  // ─── AI Integration ──────────────────────────────────────────────────────────
+  // ─── AI Helpers ──────────────────────────────────────────────────────────────
+
+  private async getAiCredentials(userId: string) {
+    const allSettings = await this.settingsService.getAll(userId);
+    const provider = allSettings.ai.activeProvider as AiProvider;
+    const model = allSettings.ai.activeModel;
+    const apiKey = await this.settingsService.getApiKey(userId, provider);
+    if (!apiKey) throw new BadRequestException(`No API key configured for ${provider}. Add your key in Settings.`);
+    return { provider, model, apiKey };
+  }
+
+  /**
+   * The recommended flow: Codegen recording + Test Case context → AI produces
+   * a production-ready script. Codegen provides real DOM selectors, AI adds
+   * assertions, structure, error handling, and maps to test steps.
+   */
+  private buildCodegenEnhancedPrompt(testCase: TestCase, codegenScript: string, targetUrl?: string): string {
+    const stepsText = (testCase.steps as any[])
+      .map((s, i) => `  Step ${i + 1}: ${s.action}\n    Expected: ${s.expectedResult}`)
+      .join('\n');
+
+    const jiraContext = testCase.jiraTicketId
+      ? `\n**Jira Ticket:** ${testCase.jiraTicketId}${testCase.jiraTicketUrl ? ` (${testCase.jiraTicketUrl})` : ''}`
+      : '';
+
+    return `You are an expert Playwright test automation engineer. You have TWO inputs:
+1. A raw Playwright codegen recording (real DOM interactions — selectors from this are ground truth)
+2. A test case with detailed steps and expected results
+
+Your job: merge them into a **single production-ready Playwright test script**.
+
+## Test Case
+**ID:** ${testCase.tcId}
+**Title:** ${testCase.title}
+**Description:** ${testCase.description || 'N/A'}
+**Preconditions:** ${testCase.preconditions || 'None'}${jiraContext}
+${targetUrl ? `**Target URL:** ${targetUrl}` : ''}
+
+## Test Steps (what should be validated)
+${stepsText}
+
+## Overall Expected Result
+${testCase.expectedResult || 'N/A'}
+
+## Codegen Recording (real DOM interactions — trust these selectors)
+\`\`\`typescript
+${codegenScript}
+\`\`\`
+
+## Your Task
+1. **Use codegen selectors as the foundation** — they come from the real DOM and are accurate
+2. **Upgrade fragile codegen selectors** — if codegen uses dynamic IDs (#login_xyz_123), replace with:
+   - data-testid (preferred)
+   - getByRole
+   - getByLabel
+   - getByText
+   But KEEP selectors that are already stable (data-testid, role-based, etc.)
+3. **Add assertions from the test steps** — each step's expected result must have a corresponding expect() assertion
+4. **Structure properly** — use test.describe() and test() blocks, map code sections to test step numbers via comments
+5. **Remove codegen bloat** — remove page.waitForTimeout(), unnecessary navigations, duplicate actions
+6. **Add waitFor conditions** — replace hard waits with proper element waits (waitForSelector, expect().toBeVisible())
+7. **Error handling** — add try/catch for flaky parts, meaningful error messages
+${targetUrl ? `8. Use '${targetUrl}' as the base URL` : '8. Use relative paths for navigation'}
+
+Return ONLY the Playwright TypeScript code. No explanations, no markdown fences.`;
+  }
 
   private buildGeneratePrompt(testCase: TestCase, targetUrl?: string): string {
     const stepsText = (testCase.steps as any[])
@@ -462,32 +854,7 @@ ${targetUrl ? `10. Use '${targetUrl}' as the base URL for navigation` : '10. Use
 Return ONLY the Playwright TypeScript code. No explanations, no markdown fences.`;
   }
 
-  private buildRefactorPrompt(rawScript: string, testCase: TestCase): string {
-    return `You are an expert Playwright test automation engineer. Refactor this raw Playwright codegen output into production-ready code.
-
-## Test Case Context
-**Title:** ${testCase.title}
-**Description:** ${testCase.description || 'N/A'}
-
-## Raw Codegen Script
-${rawScript}
-
-## Refactoring Goals
-1. Replace unstable selectors (dynamic IDs like #login_123_abcd, nth-child) with stable ones
-2. Prefer selector priority: data-testid > getByRole > getByLabel > getByText
-3. Remove hard-coded waits (page.waitForTimeout) — use proper waitFor conditions
-4. Add meaningful assertions after key actions
-5. Add proper test.describe and test() structure
-6. Add comments for readability
-7. Handle errors gracefully
-8. Improve variable naming
-9. Ensure TypeScript types are correct
-
-Return ONLY the clean Playwright TypeScript code. No explanations, no markdown fences.`;
-  }
-
   private buildHealingPrompt(failedScript: string, errorOutput: string): string {
-    // Trim error output to avoid exceeding token limits
     const trimmedError = errorOutput.length > 3000
       ? errorOutput.substring(0, 1500) + '\n...[truncated]...\n' + errorOutput.substring(errorOutput.length - 1500)
       : errorOutput;
@@ -515,14 +882,10 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
   private async callAiProvider(provider: AiProvider, model: string, apiKey: string, prompt: string): Promise<{ content: string }> {
     try {
       switch (provider) {
-        case 'openai':
-          return await this.callOpenAI(model, apiKey, prompt);
-        case 'anthropic':
-          return await this.callAnthropic(model, apiKey, prompt);
-        case 'gemini':
-          return await this.callGemini(model, apiKey, prompt);
-        default:
-          throw new BadRequestException(`Unsupported AI provider: ${provider}`);
+        case 'openai': return await this.callOpenAI(model, apiKey, prompt);
+        case 'anthropic': return await this.callAnthropic(model, apiKey, prompt);
+        case 'gemini': return await this.callGemini(model, apiKey, prompt);
+        default: throw new BadRequestException(`Unsupported AI provider: ${provider}`);
       }
     } catch (error: any) {
       if (error instanceof BadRequestException) throw error;
@@ -533,38 +896,28 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
 
   private async callOpenAI(model: string, apiKey: string, prompt: string): Promise<{ content: string }> {
     const response = await firstValueFrom(
-      this.httpService.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model,
-          messages: [
-            { role: 'system', content: 'You are a Playwright automation expert. Return only valid TypeScript Playwright test code.' },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.2,
-          max_tokens: 8192,
-        },
-        { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 120000 },
-      ),
+      this.httpService.post('https://api.openai.com/v1/chat/completions', {
+        model,
+        messages: [
+          { role: 'system', content: 'You are a Playwright automation expert. Return only valid TypeScript Playwright test code.' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.2, max_tokens: 8192,
+      }, { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 120000 }),
     );
     return { content: response.data.choices[0].message.content };
   }
 
   private async callAnthropic(model: string, apiKey: string, prompt: string): Promise<{ content: string }> {
     const response = await firstValueFrom(
-      this.httpService.post(
-        'https://api.anthropic.com/v1/messages',
-        {
-          model,
-          max_tokens: 8192,
-          messages: [{ role: 'user', content: prompt }],
-          system: 'You are a Playwright automation expert. Return only valid TypeScript Playwright test code.',
-        },
-        {
-          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-          timeout: 120000,
-        },
-      ),
+      this.httpService.post('https://api.anthropic.com/v1/messages', {
+        model, max_tokens: 8192,
+        messages: [{ role: 'user', content: prompt }],
+        system: 'You are a Playwright automation expert. Return only valid TypeScript Playwright test code.',
+      }, {
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+        timeout: 120000,
+      }),
     );
     return { content: response.data.content[0].text };
   }
@@ -586,7 +939,6 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
 
   private extractScript(rawResponse: string): string {
     let cleaned = rawResponse.trim();
-    // Strip markdown code fences
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:typescript|ts|javascript|js)?\s*\n?/, '').replace(/\n?```\s*$/, '');
     }
@@ -594,7 +946,6 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
   }
 
   private extractErrorMessage(stderr: string, stdout: string): string {
-    // Try to find the most relevant error line
     const combined = stderr + '\n' + stdout;
     const lines = combined.split('\n');
     const errorLines = lines.filter(

@@ -1,15 +1,39 @@
 import { httpClient } from '../http-client';
 import type { AutomationScript, ScriptExecution } from '@/types';
 
+const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
+
+export interface CodegenSessionStatus {
+  sessionId: string;
+  status: 'recording' | 'completed' | 'failed' | 'cancelled';
+  recordedScript: string | null;
+  error: string | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
 export const automationService = {
-  // Script generation
-  generate: (data: { testCaseId: string; projectId: string; targetUrl?: string; browserType?: string }) =>
+  // ─── Codegen Recording ──────────────────────────────────────────────────
+  startCodegen: (data: { testCaseId: string; projectId: string; targetUrl?: string; browserType?: string }) =>
+    httpClient.post<{ sessionId: string; status: string }>('/automation/codegen/start', data).then((r) => r.data),
+
+  getCodegenStatus: (sessionId: string) =>
+    httpClient.get<CodegenSessionStatus>(`/automation/codegen/${sessionId}/status`).then((r) => r.data),
+
+  stopCodegen: (sessionId: string) =>
+    httpClient.post<{ status: string }>(`/automation/codegen/${sessionId}/stop`).then((r) => r.data),
+
+  completeCodegen: (sessionId: string) =>
+    httpClient.post<AutomationScript>(`/automation/codegen/${sessionId}/complete`).then((r) => r.data),
+
+  // ─── Script Generation ──────────────────────────────────────────────────
+  generate: (data: { testCaseId: string; projectId: string; targetUrl?: string; browserType?: string; codegenScript?: string }) =>
     httpClient.post<AutomationScript>('/automation/scripts/generate', data).then((r) => r.data),
 
   importCodegen: (data: { testCaseId: string; projectId: string; rawScript: string; targetUrl?: string; browserType?: string }) =>
     httpClient.post<AutomationScript>('/automation/scripts/import-codegen', data).then((r) => r.data),
 
-  // Script CRUD
+  // ─── Script CRUD ────────────────────────────────────────────────────────
   getByTestCase: (testCaseId: string) =>
     httpClient.get<AutomationScript[]>(`/automation/scripts/test-case/${testCaseId}`).then((r) => r.data),
 
@@ -22,9 +46,12 @@ export const automationService = {
   delete: (id: string) =>
     httpClient.delete(`/automation/scripts/${id}`).then((r) => r.data),
 
-  // Execution
+  // ─── Execution ──────────────────────────────────────────────────────────
   execute: (scriptId: string, data?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean }) =>
     httpClient.post<ScriptExecution>(`/automation/scripts/${scriptId}/execute`, data || {}).then((r) => r.data),
+
+  cancelExecution: (executionId: string) =>
+    httpClient.post(`/automation/executions/${executionId}/cancel`).then((r) => r.data),
 
   getExecutions: (scriptId: string, limit = 20) =>
     httpClient.get<ScriptExecution[]>(`/automation/scripts/${scriptId}/executions`, { params: { limit } }).then((r) => r.data),
@@ -34,4 +61,8 @@ export const automationService = {
 
   getExecution: (id: string) =>
     httpClient.get<ScriptExecution>(`/automation/executions/${id}`).then((r) => r.data),
+
+  // ─── Artifacts ──────────────────────────────────────────────────────────
+  getArtifactUrl: (executionId: string, filename: string) =>
+    `${BASE}/automation/executions/${executionId}/artifacts/${filename}`,
 };
