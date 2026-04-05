@@ -20,6 +20,7 @@ import { dashboardService } from './modules/dashboard.service';
 import { settingsService } from './modules/settings.service';
 import { integrationsService } from './modules/integrations.service';
 import { automationService } from './modules/automation.service';
+import { rbacService } from './modules/rbac.service';
 import type { Project, TestCase, TestRun, TestRunCase, Release } from '@/types';
 
 export const api = {
@@ -146,6 +147,23 @@ export const api = {
     getExecution: automationService.getExecution,
   },
 
+  // ── RBAC ──────────────────────────────────────────────────────────────────────
+  rbac: {
+    getMyPermissions: rbacService.getMyPermissions,
+    getPermissions: rbacService.getPermissions,
+    getRoles: rbacService.getRoles,
+    getRole: rbacService.getRole,
+    createRole: rbacService.createRole,
+    updateRole: rbacService.updateRole,
+    deleteRole: rbacService.deleteRole,
+    getRolePermissions: rbacService.getRolePermissions,
+    setRolePermissions: rbacService.setRolePermissions,
+    getProjectMembers: rbacService.getProjectMembers,
+    addProjectMember: rbacService.addProjectMember,
+    updateProjectMemberRole: rbacService.updateProjectMemberRole,
+    removeProjectMember: rbacService.removeProjectMember,
+  },
+
   // ── Users ─────────────────────────────────────────────────────────────────────
   users: {
     list: (params?: Parameters<typeof usersService.list>[0]) => usersService.list(params),
@@ -174,5 +192,6 @@ export { dashboardService } from './modules/dashboard.service';
 export { settingsService } from './modules/settings.service';
 export { integrationsService } from './modules/integrations.service';
 export { automationService } from './modules/automation.service';
+export { rbacService } from './modules/rbac.service';
 export { httpClient } from './http-client';
 export type { ApiError } from './http-client';

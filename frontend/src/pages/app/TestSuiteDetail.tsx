@@ -18,6 +18,8 @@ import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog'
 import { useTestSuite, useTestSuites, useUpdateTestSuite, useDeleteTestSuite } from '@/hooks/useTestSuites';
 import { useTestCases, useCreateTestCase } from '@/hooks/useTestCases';
 import { useProjectStore } from '@/stores/projectStore';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 import type { TestSuite, TestCase } from '@/types';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -125,19 +127,23 @@ export const TestSuiteDetail = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+          <CanShow permission="test_suites:update">
+            <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+          </CanShow>
+          <CanShow permission="test_suites:delete">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </CanShow>
         </div>
       </div>
 
@@ -201,20 +207,24 @@ export const TestSuiteDetail = () => {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Test Cases in this Suite</CardTitle>
-          <Button size="sm" className="gap-2" onClick={() => setAddCaseDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add Test Case
-          </Button>
+          <CanShow permission="test_cases:create">
+            <Button size="sm" className="gap-2" onClick={() => setAddCaseDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Test Case
+            </Button>
+          </CanShow>
         </CardHeader>
         <CardContent>
           {testCases.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <TestTube2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No test cases in this suite yet</p>
-              <Button className="mt-4 gap-2" variant="outline" onClick={() => setAddCaseDialogOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Create First Test Case
-              </Button>
+              <CanShow permission="test_cases:create">
+                <Button className="mt-4 gap-2" variant="outline" onClick={() => setAddCaseDialogOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Create First Test Case
+                </Button>
+              </CanShow>
             </div>
           ) : (
             <div className="space-y-2">

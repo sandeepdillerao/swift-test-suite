@@ -13,6 +13,7 @@ import { FindManyOptions, ILike, Repository } from 'typeorm';
 import { generateSecureToken, hashToken } from '@/common/utils/hash.util';
 import { getPaginationParams, paginate } from '@/common/utils/pagination.util';
 import { Organization } from '@/modules/organizations/entities/organization.entity';
+import { RbacService } from '@/modules/rbac/rbac.service';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { InviteUserDto } from './dto/invite-user.dto';
@@ -30,12 +31,13 @@ export class UsersService {
     @InjectRepository(Organization)
     private orgRepository: Repository<Organization>,
     private configService: ConfigService,
+    private rbacService: RbacService,
   ) {}
 
   async findById(id: string): Promise<User | null> {
     return this.userRepository.findOne({
       where: { id },
-      relations: ['organization'],
+      relations: ['organization', 'roleEntity'],
     });
   }
 
@@ -123,12 +125,18 @@ export class UsersService {
     const inviteTokenHash = hashToken(inviteToken);
     const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+    // Resolve RBAC role
+    const rbacRole = dto.roleId
+      ? { id: dto.roleId }
+      : await this.rbacService.findRoleBySlug(organizationId, dto.role);
+
     const user = this.userRepository.create({
       email: dto.email,
       firstName: dto.firstName || '',
       lastName: dto.lastName || '',
       passwordHash: '',
       role: dto.role,
+      roleId: rbacRole?.id ?? null,
       organizationId,
       isActive: false,
       isEmailVerified: false,
@@ -202,10 +210,22 @@ export class UsersService {
     if (adminId === userId && dto.role !== UserRole.ADMIN) {
       throw new ForbiddenException('Admin cannot downgrade their own role');
     }
-    await this.userRepository.update(userId, { role: dto.role });
+
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('User not found');
-    return user;
+
+    const updateData: { role: UserRole; roleId?: string } = { role: dto.role };
+
+    // Also update roleId if we can resolve the RBAC role
+    if (dto.roleId) {
+      updateData.roleId = dto.roleId;
+    } else {
+      const rbacRole = await this.rbacService.findRoleBySlug(user.organizationId, dto.role);
+      if (rbacRole) updateData.roleId = rbacRole.id;
+    }
+
+    await this.userRepository.update(userId, updateData);
+    return this.findById(userId) as Promise<User>;
   }
 
   async softDelete(userId: string): Promise<void> {

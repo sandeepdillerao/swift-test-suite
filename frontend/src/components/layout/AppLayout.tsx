@@ -34,19 +34,22 @@ import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useProjects } from '@/hooks/useProjects';
+import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { Shield } from 'lucide-react';
 
 const navigation = [
-  { name: 'Dashboard', href: '/app', icon: LayoutDashboard },
-  { name: 'Projects', href: '/app/projects', icon: FolderKanban },
-  { name: 'Test Cases', href: '/app/test-cases', icon: TestTube2 },
-  { name: 'Test Suites', href: '/app/test-suites', icon: FolderTree },
-  { name: 'Test Runs', href: '/app/test-runs', icon: Play },
-  { name: 'Releases', href: '/app/releases', icon: Tag },
-  { name: 'Integrations', href: '/app/integrations', icon: Link2 },
-  { name: 'Users', href: '/app/users', icon: Users },
-  { name: 'Settings', href: '/app/settings', icon: Settings },
+  { name: 'Dashboard', href: '/app', icon: LayoutDashboard, permission: 'dashboard:read' },
+  { name: 'Projects', href: '/app/projects', icon: FolderKanban, permission: 'projects:read' },
+  { name: 'Test Cases', href: '/app/test-cases', icon: TestTube2, permission: 'test_cases:read' },
+  { name: 'Test Suites', href: '/app/test-suites', icon: FolderTree, permission: 'test_suites:read' },
+  { name: 'Test Runs', href: '/app/test-runs', icon: Play, permission: 'test_runs:read' },
+  { name: 'Releases', href: '/app/releases', icon: Tag, permission: 'releases:read' },
+  { name: 'Integrations', href: '/app/integrations', icon: Link2, permission: 'integrations:read' },
+  { name: 'Users', href: '/app/users', icon: Users, permission: 'users:read' },
+  { name: 'Roles & Permissions', href: '/app/roles', icon: Shield, permission: 'roles:read' },
+  { name: 'Settings', href: '/app/settings', icon: Settings, permission: 'settings:read' },
 ];
 
 export const AppLayout = () => {
@@ -56,6 +59,13 @@ export const AppLayout = () => {
   const { user, refreshToken, logout } = useAuthStore();
   const { currentProject, setCurrentProject } = useProjectStore();
   const { data: projects = [] } = useProjects();
+  const { can, loaded: permsLoaded } = usePermissions();
+
+  // Filter nav items based on user's permissions.
+  // While loading, show nothing to prevent unauthorized items flashing.
+  const visibleNav = permsLoaded
+    ? navigation.filter((item) => can(item.permission))
+    : [];
 
   // Auto-select first active project when none is persisted or the persisted one was deleted
   useEffect(() => {
@@ -112,27 +122,37 @@ export const AppLayout = () => {
 
         {/* Navigation */}
         <nav className="flex-1 space-y-1 p-2 mt-2 pb-16">
-          {navigation.map((item) => {
-            const isActive = location.pathname === item.href || 
-              (item.href !== '/app' && location.pathname.startsWith(item.href));
-            
-            return (
-              <NavLink
-                key={item.name}
-                to={item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                  sidebarCollapsed && 'justify-center px-2'
-                )}
-              >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                {!sidebarCollapsed && <span>{item.name}</span>}
-              </NavLink>
-            );
-          })}
+          {!permsLoaded ? (
+            // Skeleton placeholders while permissions are loading
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className={cn('flex items-center gap-3 rounded-lg px-3 py-2.5', sidebarCollapsed && 'justify-center px-2')}>
+                <div className="h-5 w-5 rounded bg-muted animate-pulse flex-shrink-0" />
+                {!sidebarCollapsed && <div className="h-4 w-24 rounded bg-muted animate-pulse" />}
+              </div>
+            ))
+          ) : (
+            visibleNav.map((item) => {
+              const isActive = location.pathname === item.href ||
+                (item.href !== '/app' && location.pathname.startsWith(item.href));
+
+              return (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  className={cn(
+                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    sidebarCollapsed && 'justify-center px-2'
+                  )}
+                >
+                  <item.icon className="h-5 w-5 flex-shrink-0" />
+                  {!sidebarCollapsed && <span>{item.name}</span>}
+                </NavLink>
+              );
+            })
+          )}
         </nav>
 
         {/* Current Project Indicator */}

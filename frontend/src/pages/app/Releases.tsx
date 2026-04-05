@@ -34,6 +34,8 @@ import { cn } from '@/lib/utils';
 import { format, formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import type { Release, ReleaseStatus } from '@/types';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 
 const statusConfig: Record<ReleaseStatus, { label: string; className: string; icon: typeof Tag }> = {
   planning: { label: 'Planning', className: 'bg-muted text-muted-foreground', icon: Clock },
@@ -44,6 +46,7 @@ const statusConfig: Record<ReleaseStatus, { label: string; className: string; ic
 
 export const Releases = () => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const { currentProject } = useProjectStore();
   const projectId = currentProject?.id;
   const { data: releases = [], isLoading } = useReleases(projectId);
@@ -178,15 +181,21 @@ export const Releases = () => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => handleEdit(release)}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(release)}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
+                  {can('releases:update') && (
+                    <DropdownMenuItem onClick={() => handleEdit(release)}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                  )}
+                  {can('releases:delete') && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(release)}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -231,10 +240,12 @@ export const Releases = () => {
             Manage releases and track testing progress
           </p>
         </div>
-        <Button className="gap-2" onClick={handleCreate}>
-          <Plus className="h-4 w-4" />
-          New Release
-        </Button>
+        <CanShow permission="releases:create">
+          <Button className="gap-2" onClick={handleCreate}>
+            <Plus className="h-4 w-4" />
+            New Release
+          </Button>
+        </CanShow>
       </div>
 
       {/* Tabs */}
@@ -264,10 +275,12 @@ export const Releases = () => {
               <Clock className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium">No releases in planning</h3>
               <p className="text-muted-foreground text-sm mt-1">Create a new release to get started</p>
-              <Button className="mt-4 gap-2" onClick={handleCreate}>
-                <Plus className="h-4 w-4" />
-                Create Release
-              </Button>
+              <CanShow permission="releases:create">
+                <Button className="mt-4 gap-2" onClick={handleCreate}>
+                  <Plus className="h-4 w-4" />
+                  Create Release
+                </Button>
+              </CanShow>
             </Card>
           ) : (
             planningReleases.map(release => <ReleaseCard key={release.id} release={release} />)

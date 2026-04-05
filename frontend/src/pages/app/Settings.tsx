@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAIConfigStore, AI_PROVIDERS, type AIProvider } from '@/stores/aiConfigStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -231,7 +232,8 @@ export const Settings = () => {
     ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase()
     : 'U';
 
-  const isAdminOrLead = user?.role === 'admin' || user?.role === 'qa_lead';
+  const { can } = usePermissions();
+  const isAdminOrLead = can('organization:update');
   const activeProviderConfig = AI_PROVIDERS.find((p) => p.provider === activeProvider);
 
   // Key status comes from backend only — keys are never stored client-side

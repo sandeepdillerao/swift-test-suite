@@ -26,6 +26,8 @@ import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { useTestCase, useUpdateTestCase, useDeleteTestCase } from '@/hooks/useTestCases';
 import { useTestSuites } from '@/hooks/useTestSuites';
 import { useProjectStore } from '@/stores/projectStore';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
 import type { TestCase } from '@/types';
@@ -119,19 +121,23 @@ export const TestCaseDetail = () => {
           <h1 className="text-2xl font-semibold tracking-tight">{testCase.title}</h1>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+          <CanShow permission="test_cases:update">
+            <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+          </CanShow>
+          <CanShow permission="test_cases:delete">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </CanShow>
         </div>
       </div>
 

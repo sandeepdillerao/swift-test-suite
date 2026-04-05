@@ -52,12 +52,15 @@ import { useTestSuites } from '@/hooks/useTestSuites';
 import { useProjectStore } from '@/stores/projectStore';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
+import { usePermissions } from '@/hooks/usePermissions';
 import type { TestCase, TestStatus, Priority } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { CanShow } from '@/components/auth/PermissionGuard';
 
 export const TestCases = () => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const { currentProject } = useProjectStore();
   const projectId = currentProject?.id;
   const { data: testCases = [], isLoading } = useTestCases(projectId);
@@ -239,16 +242,24 @@ export const TestCases = () => {
               <DropdownMenuItem onClick={() => handleView(row.original)}>
                 <Eye className="mr-2 h-4 w-4" /> View
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleEdit(row.original)}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleLinkJira(row.original)}>
-                <Link2 className="mr-2 h-4 w-4" /> {row.original.jiraTicketId ? 'Update Jira Link' : 'Link to Jira'}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(row.original)}>
-                <Trash2 className="mr-2 h-4 w-4" /> Delete
-              </DropdownMenuItem>
+              {can('test_cases:update') && (
+                <DropdownMenuItem onClick={() => handleEdit(row.original)}>
+                  <Pencil className="mr-2 h-4 w-4" /> Edit
+                </DropdownMenuItem>
+              )}
+              {can('test_cases:update') && (
+                <DropdownMenuItem onClick={() => handleLinkJira(row.original)}>
+                  <Link2 className="mr-2 h-4 w-4" /> {row.original.jiraTicketId ? 'Update Jira Link' : 'Link to Jira'}
+                </DropdownMenuItem>
+              )}
+              {can('test_cases:delete') && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(row.original)}>
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         ),
@@ -287,18 +298,20 @@ export const TestCases = () => {
           <p className="text-muted-foreground">Manage and organize your test cases</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" onClick={() => setGenerateFromJiraOpen(true)}>
-            <Sparkles className="h-4 w-4" />
-            Generate from Jira
-          </Button>
-          <Button variant="outline" className="gap-2" onClick={() => setImportExportOpen(true)}>
-            <Download className="h-4 w-4" />
-            Import/Export
-          </Button>
-          <Button className="gap-2" onClick={handleCreate}>
-            <Plus className="h-4 w-4" />
-            New Test Case
-          </Button>
+          <CanShow permission="test_cases:create">
+            <Button variant="outline" className="gap-2" onClick={() => setGenerateFromJiraOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+              Generate from Jira
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={() => setImportExportOpen(true)}>
+              <Download className="h-4 w-4" />
+              Import/Export
+            </Button>
+            <Button className="gap-2" onClick={handleCreate}>
+              <Plus className="h-4 w-4" />
+              New Test Case
+            </Button>
+          </CanShow>
         </div>
       </div>
 

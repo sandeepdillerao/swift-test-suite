@@ -27,6 +27,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 import {
   useJiraConfig,
   useSaveJiraConfig,
@@ -288,36 +290,40 @@ export const Integrations = () => {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={handleConnect}
-                    >
-                      <Settings2 className="h-4 w-4 mr-2" />
-                      Configure
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={handleDisconnect}
-                      disabled={disconnect.isPending}
-                    >
-                      {disconnect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
-                    </Button>
-                  </div>
+                  <CanShow permission="integrations:manage">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={handleConnect}
+                      >
+                        <Settings2 className="h-4 w-4 mr-2" />
+                        Configure
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={handleDisconnect}
+                        disabled={disconnect.isPending}
+                      >
+                        {disconnect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
+                      </Button>
+                    </div>
+                  </CanShow>
                 </div>
               ) : (
-                <Button
-                  className="w-full gap-2"
-                  onClick={integration.id === 'jira' ? handleConnect : undefined}
-                  disabled={integration.id !== 'jira'}
-                >
-                  <Link2 className="h-4 w-4" />
-                  Connect {integration.name}
-                </Button>
+                <CanShow permission="integrations:manage">
+                  <Button
+                    className="w-full gap-2"
+                    onClick={integration.id === 'jira' ? handleConnect : undefined}
+                    disabled={integration.id !== 'jira'}
+                  >
+                    <Link2 className="h-4 w-4" />
+                    Connect {integration.name}
+                  </Button>
+                </CanShow>
               )}
             </CardContent>
           </Card>
