@@ -9,4 +9,9 @@ export class CreateProjectDto {
   @Length(2, 10)
   @Matches(/^[A-Z0-9]+$/, { message: 'key must be uppercase letters and numbers only' })
   key: string;
+
+  @ApiPropertyOptional({ description: 'Linked Jira project key (e.g. ECOM)' })
+  @IsOptional()
+  @IsString()
+  jiraProjectKey?: string;
 }

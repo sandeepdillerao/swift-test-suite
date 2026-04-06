@@ -36,6 +36,8 @@ interface JiraLinkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testCase: TestCase | null;
+  /** Pre-linked Jira project key from the TestFlow project settings */
+  linkedJiraProjectKey?: string | null;
   onSave: (data: {
     jiraTicketId?: string;
     jiraTicketUrl?: string;
@@ -55,7 +57,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
-export const JiraLinkDialog = ({ open, onOpenChange, testCase, onSave, onUnlink }: JiraLinkDialogProps) => {
+export const JiraLinkDialog = ({ open, onOpenChange, testCase, linkedJiraProjectKey, onSave, onUnlink }: JiraLinkDialogProps) => {
   const [ticketId, setTicketId] = useState('');
   const [ticketUrl, setTicketUrl] = useState('');
   const [createSubtask, setCreateSubtask] = useState(false);
@@ -86,6 +88,9 @@ export const JiraLinkDialog = ({ open, onOpenChange, testCase, onSave, onUnlink 
 
   const isLinked = !!testCase?.jiraTicketId;
 
+  // If a Jira project is linked at the TestFlow project level, lock to it
+  const lockedJiraProject = linkedJiraProjectKey || null;
+
   useEffect(() => {
     if (open && testCase) {
       setTicketId(testCase.jiraTicketId || '');
@@ -94,10 +99,10 @@ export const JiraLinkDialog = ({ open, onOpenChange, testCase, onSave, onUnlink 
       setSelectedIssueKey('');
       setSearchText('');
       setIssueTypeFilter('');
-      // Pre-select project from config if available
-      setSelectedProject(jiraConfig?.defaultProjectKey || '');
+      // Prefer linked project key > config default
+      setSelectedProject(lockedJiraProject || jiraConfig?.defaultProjectKey || '');
     }
-  }, [open, testCase, jiraConfig?.defaultProjectKey]);
+  }, [open, testCase, lockedJiraProject, jiraConfig?.defaultProjectKey]);
 
   const handleSave = async () => {
     const issueKey = selectedIssueKey || ticketId.trim();
@@ -190,53 +195,61 @@ export const JiraLinkDialog = ({ open, onOpenChange, testCase, onSave, onUnlink 
 
           {jiraConnected ? (
             <>
-              {/* Project combobox */}
+              {/* Project combobox — locked when project has a linked Jira project */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Project</Label>
-                <Popover open={projectOpen} onOpenChange={setProjectOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={projectOpen}
-                      className="w-full justify-between font-normal h-9 text-sm"
-                    >
-                      <span className="truncate">
-                        {selectedProjectLabel || 'Select project...'}
-                      </span>
-                      <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                    <Command>
-                      <CommandInput placeholder="Search projects..." />
-                      <CommandList>
-                        <CommandEmpty>
-                          {projectsLoading ? 'Loading...' : 'No projects found.'}
-                        </CommandEmpty>
-                        <CommandGroup>
-                          {projectsData?.projects.map((p) => (
-                            <CommandItem
-                              key={p.key}
-                              value={`${p.key} ${p.name}`}
-                              onSelect={() => {
-                                setSelectedProject(p.key === selectedProject ? '' : p.key);
-                                setProjectOpen(false);
-                              }}
-                            >
-                              <Check className={cn(
-                                'mr-2 h-3.5 w-3.5',
-                                selectedProject === p.key ? 'opacity-100' : 'opacity-0',
-                              )} />
-                              <span className="font-mono text-xs mr-2 text-muted-foreground">{p.key}</span>
-                              <span className="truncate">{p.name}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Label className="text-xs font-medium">Jira Project</Label>
+                {lockedJiraProject ? (
+                  <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-muted/50">
+                    <Badge variant="secondary" className="font-mono text-xs">{lockedJiraProject}</Badge>
+                    <span className="text-sm text-muted-foreground truncate">{selectedProjectLabel || lockedJiraProject}</span>
+                    <span className="text-[10px] text-muted-foreground ml-auto">Linked in project settings</span>
+                  </div>
+                ) : (
+                  <Popover open={projectOpen} onOpenChange={setProjectOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={projectOpen}
+                        className="w-full justify-between font-normal h-9 text-sm"
+                      >
+                        <span className="truncate">
+                          {selectedProjectLabel || 'Select project...'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search projects..." />
+                        <CommandList>
+                          <CommandEmpty>
+                            {projectsLoading ? 'Loading...' : 'No projects found.'}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {projectsData?.projects.map((p) => (
+                              <CommandItem
+                                key={p.key}
+                                value={`${p.key} ${p.name}`}
+                                onSelect={() => {
+                                  setSelectedProject(p.key === selectedProject ? '' : p.key);
+                                  setProjectOpen(false);
+                                }}
+                              >
+                                <Check className={cn(
+                                  'mr-2 h-3.5 w-3.5',
+                                  selectedProject === p.key ? 'opacity-100' : 'opacity-0',
+                                )} />
+                                <span className="font-mono text-xs mr-2 text-muted-foreground">{p.key}</span>
+                                <span className="truncate">{p.name}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
 
               {/* Filters row */}

@@ -6,4 +6,9 @@ export class UpdateProjectDto {
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isArchived?: boolean;
   @ApiPropertyOptional() @IsOptional() settings?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ description: 'Linked Jira project key (e.g. ECOM), or null to unlink' })
+  @IsOptional()
+  @IsString()
+  jiraProjectKey?: string | null;
 }

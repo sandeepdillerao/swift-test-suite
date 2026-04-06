@@ -13,7 +13,10 @@ export class ProjectsService {
   async create(organizationId: string, createdBy: string, dto: CreateProjectDto): Promise<Project> {
     const existing = await this.repo.findOne({ where: { organizationId, key: dto.key } });
     if (existing) throw new ConflictException(`Project key '${dto.key}' already used in this organization`);
-    const project = this.repo.create({ ...dto, organizationId, createdBy });
+    const { jiraProjectKey, ...rest } = dto;
+    const settings: Record<string, unknown> = {};
+    if (jiraProjectKey) settings.jiraProjectKey = jiraProjectKey;
+    const project = this.repo.create({ ...rest, organizationId, createdBy, settings });
     return this.repo.save(project);
   }
 
@@ -34,8 +37,23 @@ export class ProjectsService {
   }
 
   async update(id: string, organizationId: string, dto: UpdateProjectDto): Promise<Project> {
-    await this.findById(id, organizationId);
-    await this.repo.update(id, dto as any);
+    const project = await this.findById(id, organizationId);
+    const { jiraProjectKey, settings: dtoSettings, ...rest } = dto;
+
+    // Merge jiraProjectKey into settings
+    if (jiraProjectKey !== undefined) {
+      const currentSettings = (project.settings || {}) as Record<string, unknown>;
+      if (jiraProjectKey === null || jiraProjectKey === '') {
+        delete currentSettings.jiraProjectKey;
+      } else {
+        currentSettings.jiraProjectKey = jiraProjectKey;
+      }
+      (rest as any).settings = { ...currentSettings, ...(dtoSettings || {}) };
+    } else if (dtoSettings) {
+      (rest as any).settings = { ...(project.settings || {}), ...dtoSettings };
+    }
+
+    await this.repo.update(id, rest as any);
     return this.findById(id, organizationId);
   }
 

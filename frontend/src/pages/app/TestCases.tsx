@@ -394,8 +394,8 @@ export const TestCases = () => {
       <TestCaseDialog open={dialogOpen} onOpenChange={setDialogOpen} testCase={editingTestCase} suites={suites.map(s => ({ id: s.id, name: s.name }))} onSave={handleSave} />
       <DeleteConfirmDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} title="Delete Test Case" description={`Are you sure you want to delete "${deletingTestCase?.title}"? This action cannot be undone.`} onConfirm={confirmDelete} />
       <ImportExportDialog open={importExportOpen} onOpenChange={setImportExportOpen} testCases={testCases} suites={suites.map(s => ({ id: s.id, name: s.name }))} projectId={projectId} onImport={handleBulkImport} />
-      <JiraLinkDialog open={jiraLinkOpen} onOpenChange={setJiraLinkOpen} testCase={jiraLinkTarget} onSave={handleJiraLinkSave} onUnlink={handleJiraUnlink} />
-      <GenerateFromJiraDialog open={generateFromJiraOpen} onOpenChange={setGenerateFromJiraOpen} onAccept={handleAcceptGenerated} projectId={projectId} suites={suites.map(s => ({ id: s.id, name: s.name }))} isAiConfigured={isAiConfigured} />
+      <JiraLinkDialog open={jiraLinkOpen} onOpenChange={setJiraLinkOpen} testCase={jiraLinkTarget} linkedJiraProjectKey={currentProject?.settings?.jiraProjectKey} onSave={handleJiraLinkSave} onUnlink={handleJiraUnlink} />
+      <GenerateFromJiraDialog open={generateFromJiraOpen} onOpenChange={setGenerateFromJiraOpen} onAccept={handleAcceptGenerated} projectId={projectId} suites={suites.map(s => ({ id: s.id, name: s.name }))} isAiConfigured={isAiConfigured} linkedJiraProjectKey={currentProject?.settings?.jiraProjectKey} />
     </div>
   );
 };

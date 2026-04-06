@@ -70,7 +70,7 @@ export interface Project {
   organizationId: string;
   isArchived: boolean;
   createdBy: string;
-  settings: Record<string, unknown>;
+  settings: Record<string, unknown> & { jiraProjectKey?: string };
   createdAt: string;
   updatedAt: string;
 }

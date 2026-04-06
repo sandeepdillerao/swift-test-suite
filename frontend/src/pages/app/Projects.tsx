@@ -11,6 +11,7 @@ import {
   Key,
   Clock,
   Search,
+  Link2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -72,14 +73,19 @@ export const Projects = () => {
   const handleEdit = (p: Project) => { setEditingProject(p); setDialogOpen(true); };
   const handleDeletePrompt = (p: Project) => { setDeletingProject(p); setDeleteDialogOpen(true); };
 
-  const handleSave = async (data: Partial<Project>) => {
+  const handleSave = async (data: Partial<Project> & { jiraProjectKey?: string | null }) => {
+    const { jiraProjectKey, key, ...rest } = data;
+
     if (editingProject) {
+      // Don't send `key` on update — it's immutable and not in UpdateProjectDto
+      const payload = { ...rest, jiraProjectKey } as any;
       updateProject.mutate(
-        { id: editingProject.id, data },
+        { id: editingProject.id, data: payload },
         { onSuccess: () => { toast.success('Project updated'); setDialogOpen(false); }, onError: (e) => toast.error(e.message) },
       );
     } else {
-      createProject.mutate(data, {
+      const payload = { ...rest, key, jiraProjectKey } as any;
+      createProject.mutate(payload, {
         onSuccess: (created) => {
           toast.success('Project created');
           setCurrentProject(created);
@@ -207,6 +213,12 @@ export const Projects = () => {
               <Clock className="h-3 w-3" />
               {formatDistanceToNow(new Date(project.updatedAt), { addSuffix: true })}
             </span>
+            {project.settings?.jiraProjectKey && (
+              <span className="flex items-center gap-1">
+                <Link2 className="h-3 w-3" />
+                <code className="font-mono">{project.settings.jiraProjectKey}</code>
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>

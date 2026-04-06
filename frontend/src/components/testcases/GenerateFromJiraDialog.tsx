@@ -35,6 +35,8 @@ interface GenerateFromJiraDialogProps {
   suiteId?: string;
   suites?: { id: string; name: string }[];
   isAiConfigured?: boolean;
+  /** Pre-linked Jira project key from the TestFlow project settings */
+  linkedJiraProjectKey?: string | null;
 }
 
 // --- Helpers ---
@@ -52,6 +54,7 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export const GenerateFromJiraDialog = ({
   open, onOpenChange, onAccept, projectId, suiteId, suites = [], isAiConfigured = false,
+  linkedJiraProjectKey,
 }: GenerateFromJiraDialogProps) => {
   const navigate = useNavigate();
   const { activeProvider, activeModel } = useAIConfigStore();
@@ -85,6 +88,9 @@ export const GenerateFromJiraDialog = ({
   // Mutations
   const generateMutation = useGenerateFromJira();
 
+  // If a Jira project is linked at the TestFlow project level, lock to it
+  const lockedJiraProject = linkedJiraProjectKey || null;
+
   // Reset on open/close
   useEffect(() => {
     if (open) {
@@ -92,9 +98,9 @@ export const GenerateFromJiraDialog = ({
       setSelectedIssueKey('');
       setManualTicketId('');
       setIssueTypeFilter('');
-      setSelectedProject(jiraConfig?.defaultProjectKey || '');
+      setSelectedProject(lockedJiraProject || jiraConfig?.defaultProjectKey || '');
     }
-  }, [open, jiraConfig?.defaultProjectKey]);
+  }, [open, lockedJiraProject, jiraConfig?.defaultProjectKey]);
 
   // Derived
   const issueTypes = ['story', 'task', 'bug', 'epic'] as const;
@@ -164,41 +170,49 @@ export const GenerateFromJiraDialog = ({
 
       {jiraConnected ? (
         <>
-          {/* Project combobox */}
+          {/* Project combobox — locked when project has a linked Jira project */}
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Jira Project</Label>
-            <Popover open={projectOpen} onOpenChange={setProjectOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline" role="combobox" aria-expanded={projectOpen}
-                  className="w-full justify-between font-normal h-9 text-sm"
-                >
-                  <span className="truncate">{selectedProjectLabel || 'Select project...'}</span>
-                  <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                <Command>
-                  <CommandInput placeholder="Search projects..." />
-                  <CommandList>
-                    <CommandEmpty>{projectsLoading ? 'Loading...' : 'No projects found.'}</CommandEmpty>
-                    <CommandGroup>
-                      {projectsData?.projects.map((p) => (
-                        <CommandItem
-                          key={p.key}
-                          value={`${p.key} ${p.name}`}
-                          onSelect={() => { setSelectedProject(p.key === selectedProject ? '' : p.key); setProjectOpen(false); }}
-                        >
-                          <Check className={cn('mr-2 h-3.5 w-3.5', selectedProject === p.key ? 'opacity-100' : 'opacity-0')} />
-                          <span className="font-mono text-xs mr-2 text-muted-foreground">{p.key}</span>
-                          <span className="truncate">{p.name}</span>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
+            {lockedJiraProject ? (
+              <div className="flex items-center gap-2 h-9 px-3 rounded-md border bg-muted/50">
+                <Badge variant="secondary" className="font-mono text-xs">{lockedJiraProject}</Badge>
+                <span className="text-sm text-muted-foreground truncate">{selectedProjectLabel || lockedJiraProject}</span>
+                <span className="text-[10px] text-muted-foreground ml-auto">Linked in project settings</span>
+              </div>
+            ) : (
+              <Popover open={projectOpen} onOpenChange={setProjectOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline" role="combobox" aria-expanded={projectOpen}
+                    className="w-full justify-between font-normal h-9 text-sm"
+                  >
+                    <span className="truncate">{selectedProjectLabel || 'Select project...'}</span>
+                    <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search projects..." />
+                    <CommandList>
+                      <CommandEmpty>{projectsLoading ? 'Loading...' : 'No projects found.'}</CommandEmpty>
+                      <CommandGroup>
+                        {projectsData?.projects.map((p) => (
+                          <CommandItem
+                            key={p.key}
+                            value={`${p.key} ${p.name}`}
+                            onSelect={() => { setSelectedProject(p.key === selectedProject ? '' : p.key); setProjectOpen(false); }}
+                          >
+                            <Check className={cn('mr-2 h-3.5 w-3.5', selectedProject === p.key ? 'opacity-100' : 'opacity-0')} />
+                            <span className="font-mono text-xs mr-2 text-muted-foreground">{p.key}</span>
+                            <span className="truncate">{p.name}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
 
           {/* Search & filters */}
