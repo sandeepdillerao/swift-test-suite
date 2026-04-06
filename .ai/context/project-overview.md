@@ -13,32 +13,48 @@ Software Quality Assurance. Core domain entities: Organizations → Projects →
 
 ## Main Modules
 
-| Module | Location | Responsibility |
-|---|---|---|
-| Auth | `backend/src/modules/auth/` | JWT login, refresh rotation, password reset, email verify, invites |
-| Users | `backend/src/modules/users/` | CRUD, RBAC roles, invite flow, activate/deactivate |
-| Organizations | `backend/src/modules/organizations/` | Org management, member listing, stats |
-| Projects | _(Phase 2)_ | Multi-project per org |
-| Test Suites | _(Phase 2)_ | Hierarchical test case grouping |
-| Test Cases | _(Phase 2)_ | Authoring, steps, Jira linking, import/export |
-| Test Runs | _(Phase 2)_ | Execution tracking per case, pass rate, env/build |
-| Releases | _(Phase 2)_ | Release gates linked to test runs |
-| Dashboard | _(Phase 2)_ | Aggregate stats, activity feed |
-| AI Config | `frontend/src/stores/aiConfigStore.ts` | Multi-provider AI key management (Gemini, OpenAI, Anthropic) |
+| Module | Backend path | Frontend path | Status |
+|---|---|---|---|
+| Auth | `backend/src/modules/auth/` | `services/modules/auth.service.ts` | ✅ Complete |
+| Users | `backend/src/modules/users/` | `services/modules/users.service.ts` + `hooks/useUsers*` | ✅ Complete |
+| Organizations | `backend/src/modules/organizations/` | `services/modules/organizations.service.ts` | ✅ Complete |
+| Projects | `backend/src/modules/projects/` | `services/modules/projects.service.ts` + `hooks/useProjects.ts` | ✅ Complete |
+| Test Suites | `backend/src/modules/test-suites/` | `services/modules/test-suites.service.ts` + `hooks/useTestSuites.ts` | ✅ Complete |
+| Test Cases | `backend/src/modules/test-cases/` | `services/modules/test-cases.service.ts` + `hooks/useTestCases.ts` | ✅ Complete |
+| Test Runs | `backend/src/modules/test-runs/` | `services/modules/test-runs.service.ts` + `hooks/useTestRuns.ts` | ✅ Complete |
+| Releases | `backend/src/modules/releases/` | `services/modules/releases.service.ts` + `hooks/useReleases.ts` | ✅ Complete |
+| Dashboard | `backend/src/modules/dashboard/` | `services/modules/dashboard.service.ts` + `hooks/useDashboard.ts` | ✅ Complete |
+| Settings | `backend/src/modules/settings/` | `services/modules/settings.service.ts` | ✅ Complete |
+| Integrations (Jira + AI) | `backend/src/modules/integrations/` | `services/modules/integrations.service.ts` + `hooks/useIntegrations.ts` | ✅ Complete |
+| Automation (Playwright) | `backend/src/modules/automation/` | `services/modules/automation.service.ts` + `hooks/useAutomation.ts` | ✅ Complete |
+| RBAC | `backend/src/modules/rbac/` | `services/modules/rbac.service.ts` + `hooks/useRbac.ts` | ✅ Complete |
+| AI Audit | `backend/src/common/modules/ai-audit/` | `pages/app/AiReviewPage.tsx` | ✅ Complete |
 
 ---
 
 ## Integrations
-- **Jira** — test case generation from tickets, subtask sync (`jiraSyncStatus` field on TestCase)
-- **GitLab** — planned integration (Integrations page exists)
-- **AI Providers** — Gemini 2.5, GPT-4o, Claude Sonnet (API keys stored in Zustand, persisted to localStorage)
-- **Email** — not yet wired; all flows log tokens to console
+- **Jira** — Fully implemented: config, search, link test cases, sync status, generate from issues
+- **AI Providers** — Fully implemented: OpenAI, Anthropic, Gemini (API keys encrypted in DB via Settings module)
+- **Playwright** — Fully implemented: test recording, codegen
+- **GitLab** — UI exists, backend API pending
+- **Email** — Console logging only (no SMTP configured)
+- **Redis** — Provisioned but not yet consumed
+
+---
+
+## Phase Status
+
+| Phase | Status |
+|---|---|
+| Phase 1 — Auth, Users, Organizations | ✅ Complete |
+| Phase 2 — Projects, TestSuites, TestCases, TestRuns, Releases, Dashboard | ✅ Complete (backend + frontend) |
+| Phase 3 — Integrations, AI, Automation, RBAC, Settings | 🟢 Mostly complete (GitLab/Email/Redis pending) |
 
 ---
 
 ## High-Level Request Flow
 ```
-Browser → React SPA (Vite, port 8080)
+Browser → React SPA (Vite, port 5173)
   → Axios httpClient (JWT Bearer injected, auto-refresh on 401)
   → NestJS API (port 3000, prefix /api/v1)
     → JwtAuthGuard → RolesGuard
@@ -47,7 +63,7 @@ Browser → React SPA (Vite, port 8080)
 ```
 
 ## Key URLs (local)
-- Frontend: `http://localhost:8080`
+- Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:3000/api/v1`
 - Swagger: `http://localhost:3000/api/docs`
 - pgAdmin: `http://localhost:5050`

@@ -8,7 +8,7 @@ Load this file at the start of every session to orient yourself before doing any
 ## Step 1 — Read Master Context First
 
 Always start here:
-→ [`../CONTEXT.md`](../CONTEXT.md) — 2-page architecture + standards + key commands summary
+→ [`../CLAUDE.md`](../CLAUDE.md) — Quick-reference guide: commands, architecture, coding standards, key patterns
 
 ---
 
@@ -71,18 +71,18 @@ Agents define role, decision boundaries, and output style:
 ### Project structure
 ```
 swift-test-suite/
-├── frontend/          React 18 + Vite + Tailwind + shadcn/ui (port 8080)
+├── frontend/          React 18 + Vite + Tailwind + shadcn/ui (port 5173)
 ├── backend/           NestJS 10 + TypeORM + PostgreSQL 15 (port 3000)
-├── CONTEXT.md         Master context summary
-└── .ai/               This folder
+├── CLAUDE.md          Quick-reference guide
+└── .ai/               This folder (deep-dive context)
 ```
 
 ### Phase status
 | Phase | Status |
 |---|---|
 | Phase 1 — Auth, Users, Organizations | ✅ Done |
-| Phase 2 — Projects, TestSuites, TestCases, TestRuns, Releases, Dashboard | ⏳ Backend pending (frontend UI exists) |
-| Phase 3 — Jira/GitLab integration, AI generation, Email, Redis queues | 🔲 Not started |
+| Phase 2 — Projects, TestSuites, TestCases, TestRuns, Releases, Dashboard | ✅ Backend implemented, frontend UI exists |
+| Phase 3 — Jira, AI generation, Playwright, RBAC, Settings | 🟢 Partially done (Jira + AI + Automation + RBAC + Settings working; GitLab/Email/Redis pending) |
 
 ### Seed credentials (local dev)
 ```
@@ -94,7 +94,7 @@ viewer@testflow.dev  /  Viewer@1234
 
 ### Key URLs (local)
 ```
-Frontend:  http://localhost:8080
+Frontend:  http://localhost:5173
 API:       http://localhost:3000/api/v1
 Swagger:   http://localhost:3000/api/docs
 pgAdmin:   http://localhost:5050

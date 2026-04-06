@@ -1,10 +1,15 @@
 # Integrations Context — TestFlow TCM
 
+**Status**: Jira + AI Generation + Playwright Automation + Settings + AI Audit — all fully implemented.
+GitLab UI exists but backend API pending. Email is console-only. Redis provisioned but unused.
+
 ## Module Structure
 
 ```
 backend/src/modules/integrations/
   integrations.module.ts          ← imports HttpModule, TypeORM, SettingsModule
+  integrations.controller.ts
+  integrations.service.ts
   jira/
     jira.controller.ts            ← 11 endpoints under /integrations/jira/
     jira.service.ts               ← Jira API calls, encryption, linking, sync
@@ -19,6 +24,16 @@ backend/src/modules/integrations/
     ai-generation.service.ts      ← AI test case generation from Jira issues
     entities/
       ai-audit-log.entity.ts     ← Tracks AI usage: provider, tokens, response time
+
+backend/src/modules/automation/
+  automation.module.ts
+  automation.controller.ts        ← Playwright recording/codegen endpoints
+  automation.service.ts
+  entities/
+  dto/
+
+backend/src/common/modules/ai-audit/
+  ← AI call logging and audit trail (used by integrations)
 ```
 
 ---

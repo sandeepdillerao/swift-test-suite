@@ -1,18 +1,92 @@
 # Backend Context — TestFlow TCM
 
 ## Stack
-- **Framework**: NestJS 10 (TypeScript strict mode)
-- **ORM**: TypeORM 0.3
-- **Database**: PostgreSQL 15
-- **Auth**: passport-jwt + passport-local, @nestjs/jwt
-- **Validation**: class-validator + class-transformer
-- **Docs**: @nestjs/swagger (OpenAPI 3)
-- **Config**: @nestjs/config + Joi schema validation
+- **Framework**: NestJS 10.3.0 (TypeScript strict mode)
+- **ORM**: TypeORM 0.3.20
+- **Database**: PostgreSQL 15-alpine
+- **Auth**: Passport.js 10.0.3 + JWT 10.2.0 (Local + JWT strategies)
+- **Validation**: class-validator 0.14.1 + class-transformer
+- **Docs**: @nestjs/swagger 7.3.0 (OpenAPI 3)
+- **Config**: @nestjs/config 3.1.1 + Joi 17.12.2 schema validation
 - **Hashing**: bcryptjs (rounds from `BCRYPT_ROUNDS` env)
+- **HTTP Client**: Axios 1.14.0 (for 3rd party APIs: Jira, AI)
+- **Testing**: Jest 29.7.0 + Supertest 7.0.0
+- **Browser Automation**: Playwright 1.59.1
 
 ---
 
-## Folder Convention
+## Directory Structure
+
+```
+backend/
+├── package.json
+├── tsconfig.json              # ES2021, decorators enabled
+├── nest-cli.json
+├── .env / .env.example
+├── docker-compose.yml         # PostgreSQL, Redis, pgAdmin
+├── Dockerfile
+│
+├── src/
+│   ├── main.ts                # Entry point (bootstrap, CORS, validation, Swagger)
+│   ├── app.module.ts          # Root module (imports all, global providers)
+│   │
+│   ├── config/
+│   │   ├── app.config.ts      # port, apiPrefix, corsOrigins, swaggerEnabled
+│   │   ├── database.config.ts
+│   │   ├── jwt.config.ts
+│   │   └── config.validation.ts  # Joi schema
+│   │
+│   ├── database/
+│   │   ├── data-source.ts     # TypeORM DataSource config
+│   │   ├── init.sql           # uuid-ossp + pg_trgm extensions
+│   │   ├── migrations/
+│   │   └── seeds/
+│   │
+│   ├── common/
+│   │   ├── decorators/
+│   │   │   ├── public.decorator.ts       # @Public() — skip auth
+│   │   │   ├── roles.decorator.ts        # @Roles('admin', 'qa_lead')
+│   │   │   ├── permissions.decorator.ts  # @Permissions('manage:projects')
+│   │   │   └── current-user.decorator.ts # @CurrentUser() — injects request.user
+│   │   ├── guards/
+│   │   │   ├── jwt-auth.guard.ts         # JWT validation (global)
+│   │   │   └── roles.guard.ts            # Role-based access (global)
+│   │   ├── interceptors/
+│   │   │   ├── transform.interceptor.ts  # Wraps in { success, data, timestamp }
+│   │   │   └── logging.interceptor.ts
+│   │   ├── filters/
+│   │   │   └── http-exception.filter.ts  # RFC 7807 error format
+│   │   ├── utils/
+│   │   │   ├── hash.util.ts              # SHA-256 hashing, generateSecureToken, slugify
+│   │   │   ├── encryption.util.ts        # AES encryption for sensitive data
+│   │   │   └── pagination.util.ts        # getPaginationParams, paginate helper
+│   │   └── modules/
+│   │       └── ai-audit/                 # AI call logging and audit trail
+│   │
+│   └── modules/                          # Feature modules (14 total)
+│       ├── auth/              # login, refresh, password reset, email verify
+│       ├── users/             # CRUD, invite, activate/deactivate
+│       ├── organizations/     # org CRUD, member management, settings
+│       ├── projects/          # project CRUD, team assignment
+│       ├── test-suites/       # suite CRUD, hierarchical nesting
+│       ├── test-cases/        # case CRUD, steps, status, priority
+│       ├── test-runs/         # run execution, history, case status updates
+│       ├── releases/          # release management, versioning
+│       ├── dashboard/         # stats, aggregations
+│       ├── settings/          # API key management, encrypted storage
+│       ├── integrations/      # Jira + AI generation
+│       ├── automation/        # Playwright test recording, codegen
+│       └── rbac/              # custom roles & permissions
+│
+├── dist/
+├── test/
+│   └── jest-e2e.json
+└── uploads/
+```
+
+---
+
+## Folder Convention (per module)
 
 ```
 src/modules/{name}/
@@ -34,7 +108,7 @@ src/modules/{name}/
 - UUID primary key: `@PrimaryGeneratedColumn('uuid')`
 - Timestamps: `@CreateDateColumn() createdAt`, `@UpdateDateColumn() updatedAt`
 - Soft delete: `@DeleteDateColumn() deletedAt` — **never hard delete**
-- JSONB settings field on all major entities: `@Column({ type: 'jsonb', default: '{}' })`
+- JSONB settings field on major entities: `@Column({ type: 'jsonb', default: '{}' })`
 - Sensitive fields use `@Exclude()` from class-transformer (passwordHash, tokens)
 - All FK columns are explicit UUID columns + `@JoinColumn({ name: 'xyzId' })`
 
@@ -68,6 +142,7 @@ new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: tru
   - Rotated on every `/auth/refresh` call
 - **`@Public()`** decorator bypasses `JwtAuthGuard` for open endpoints
 - **`@Roles(...)`** decorator + `RolesGuard` for role-based access
+- **`@Permissions(...)`** decorator for fine-grained RBAC
 
 ## Role Hierarchy
 ```
@@ -76,6 +151,12 @@ qa_lead  → manage projects, suites, cases, runs; manage testers
 tester   → execute runs, view all, create test cases
 viewer   → read-only
 ```
+
+### RBAC Module (Custom Roles)
+- **Role** entity: Custom role with permissions
+- **Permission** entity: Fine-grained permission codes (manage:projects, execute:runs, etc.)
+- **RolePermission** join table: Links roles to permissions
+- **RolesGuard** checks decorators against user's role permissions
 
 ---
 
@@ -111,7 +192,7 @@ Every endpoint:
 ---
 
 ## Config Pattern
-whenever you find some configrable variable take ti from env file.
+Whenever you find a configurable variable, take it from env file.
 All config via `@nestjs/config` with `registerAs`:
 ```ts
 // config/app.config.ts
@@ -133,7 +214,82 @@ Joi validation schema in `config/config.validation.ts` — all required vars val
 
 ---
 
+## Encryption
+`src/common/utils/encryption.util.ts`:
+- AES encryption for API keys, tokens, sensitive data
+- Encrypt on write, decrypt on read
+- Used by Settings module and Organization settings
+
+---
+
 ## Pagination Utility
 `src/common/utils/pagination.util.ts`:
 - `getPaginationParams(page, limit)` → `{ skip, take }` for TypeORM
 - `paginate(data, total, page, limit)` → `PaginatedResult<T>`
+
+---
+
+## Testing
+
+### Unit Tests
+- Location: `src/**/*.spec.ts`
+- Framework: Jest
+- Pattern: Mock repositories via `getRepositoryToken()`, test service logic
+
+```typescript
+describe('ProjectsService', () => {
+  let service: ProjectsService;
+  let repository: Repository<Project>;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ProjectsService,
+        { provide: getRepositoryToken(Project), useValue: mockRepository }
+      ]
+    }).compile();
+    service = module.get<ProjectsService>(ProjectsService);
+  });
+
+  it('should list projects', async () => {
+    jest.spyOn(repository, 'find').mockResolvedValue([mockProject]);
+    expect(await service.list()).toEqual([mockProject]);
+  });
+});
+```
+
+### E2E Tests
+- Location: `test/**/*.e2e-spec.ts`
+- Config: `test/jest-e2e.json`
+- Framework: Jest + Supertest (full HTTP stack)
+
+### Commands
+```bash
+npm run test              # Unit tests
+npm run test:watch       # Watch mode
+npm run test:cov         # Coverage report
+npm run test:e2e         # E2E tests
+```
+
+---
+
+## Commands Reference
+
+```bash
+# Development
+npm run start:dev          # Watch mode
+npm run start:debug       # Debug mode
+npm run start:prod        # Production
+
+# Database
+npm run migration:generate -- src/database/migrations/Name
+npm run migration:run
+npm run migration:revert
+npm run migration:show
+npm run seed
+
+# Code quality
+npm run lint             # ESLint with --fix
+npm run format           # Prettier reformat
+npm run build            # Compile TypeScript
+```
