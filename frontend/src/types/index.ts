@@ -13,12 +13,46 @@ export interface User {
   displayName: string;
   avatarUrl?: string | null;
   role: 'admin' | 'qa_lead' | 'tester' | 'viewer';
+  roleId?: string | null;
+  roleEntity?: Role | null;
   organizationId: string;
   isActive: boolean;
   isEmailVerified: boolean;
   lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// ─── RBAC Types ──────────────────────────────────────────────────────────────
+
+export interface Permission {
+  id: string;
+  code: string;
+  category: string;
+  description: string | null;
+}
+
+export interface Role {
+  id: string;
+  organizationId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  isSystem: boolean;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  projectId: string;
+  userId: string;
+  roleId: string;
+  addedBy: string | null;
+  user?: User;
+  role?: Role;
+  createdAt: string;
 }
 
 export interface Organization {

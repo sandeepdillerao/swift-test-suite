@@ -24,9 +24,12 @@ import { useProjectStore } from '@/stores/projectStore';
 import { cn } from '@/lib/utils';
 import type { TestSuite } from '@/types';
 import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 
 export const TestSuites = () => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const { currentProject } = useProjectStore();
   const projectId = currentProject?.id ?? '';
   const { data: suites = [], isLoading } = useTestSuites(projectId);
@@ -102,10 +105,12 @@ export const TestSuites = () => {
             Organize test cases into logical groups
           </p>
         </div>
-        <Button className="gap-2" onClick={handleCreate} disabled={!projectId}>
-          <Plus className="h-4 w-4" />
-          New Suite
-        </Button>
+        <CanShow permission="test_suites:create">
+          <Button className="gap-2" onClick={handleCreate} disabled={!projectId}>
+            <Plus className="h-4 w-4" />
+            New Suite
+          </Button>
+        </CanShow>
       </div>
 
       {!projectId && (
@@ -155,17 +160,21 @@ export const TestSuites = () => {
                       <ChevronRight className="mr-2 h-4 w-4" />
                       View Details
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleEdit(suite)}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => handleDelete(suite)}
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
+                    {can('test_suites:update') && (
+                      <DropdownMenuItem onClick={() => handleEdit(suite)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                    )}
+                    {can('test_suites:delete') && (
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={() => handleDelete(suite)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </CardHeader>
@@ -205,10 +214,12 @@ export const TestSuites = () => {
           <p className="text-muted-foreground text-sm mt-1">
             Create your first test suite to organize your test cases
           </p>
-          <Button className="mt-4 gap-2" onClick={handleCreate}>
-            <Plus className="h-4 w-4" />
-            Create Suite
-          </Button>
+          <CanShow permission="test_suites:create">
+            <Button className="mt-4 gap-2" onClick={handleCreate}>
+              <Plus className="h-4 w-4" />
+              Create Suite
+            </Button>
+          </CanShow>
         </Card>
       )}
 

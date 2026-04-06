@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { Eye, EyeOff, FlaskConical, Lock, Mail } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 const DEV_CREDENTIALS = [
@@ -20,6 +21,7 @@ const DEV_CREDENTIALS = [
 export const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const { login } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +37,8 @@ export const Login = () => {
     try {
       const { accessToken, refreshToken, user } = await api.auth.login(email, password);
       login(user, accessToken, refreshToken);
+      // Force fresh permission fetch for the newly logged-in user
+      queryClient.invalidateQueries({ queryKey: ['rbac', 'my-permissions'] });
       toast.success(`Welcome back, ${user.displayName}!`, {
         description: `Signed in as ${user.role.replace('_', ' ')}`,
       });

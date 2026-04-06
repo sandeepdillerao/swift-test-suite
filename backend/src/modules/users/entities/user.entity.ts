@@ -1,4 +1,5 @@
 import { Organization } from '@/modules/organizations/entities/organization.entity';
+import { Role } from '@/modules/rbac/entities/role.entity';
 import { Exclude } from 'class-transformer';
 import {
   Column,
@@ -45,6 +46,14 @@ export class User {
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.TESTER })
   role: UserRole;
+
+  /** New RBAC: FK to organization-scoped Role entity */
+  @Column({ type: 'uuid', nullable: true })
+  roleId: string | null;
+
+  @ManyToOne(() => Role, { eager: false, nullable: true })
+  @JoinColumn({ name: 'roleId' })
+  roleEntity: Role | null;
 
   @Column({ type: 'boolean', default: false })
   isActive: boolean;

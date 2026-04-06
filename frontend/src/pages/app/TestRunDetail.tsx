@@ -48,6 +48,8 @@ import { useTestRun, useTestRunHistory, useUpdateTestRun, useUpdateTestRunCase }
 import { useReleases } from '@/hooks/useReleases';
 import { useUsers } from '@/hooks/useUsers';
 import { useAuthStore } from '@/stores/authStore';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
@@ -263,12 +265,14 @@ export const TestRunDetail = () => {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {testRun.status === 'active' && (
-            <Button onClick={handleCompleteRun} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Complete Run
-            </Button>
-          )}
+          <CanShow permission="test_runs:update">
+            {testRun.status === 'active' && (
+              <Button onClick={handleCompleteRun} className="gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Complete Run
+              </Button>
+            )}
+          </CanShow>
         </div>
       </div>
 
@@ -497,24 +501,26 @@ export const TestRunDetail = () => {
                       <CardContent className="pt-0 pb-4 px-4 border-t">
                         <div className="grid md:grid-cols-2 gap-6 pt-4">
                           <div className="space-y-4">
-                            <div>
-                              <label className="text-sm font-medium mb-2 block">Update Status</label>
-                              <Select 
-                                value={runCase.status} 
-                                onValueChange={(value) => handleStatusChange(runCase, value as TestStatus)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="passed">Passed</SelectItem>
-                                  <SelectItem value="failed">Failed</SelectItem>
-                                  <SelectItem value="blocked">Blocked</SelectItem>
-                                  <SelectItem value="in_progress">In Progress</SelectItem>
-                                  <SelectItem value="not_run">Not Run</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            <CanShow permission="test_runs:execute">
+                              <div>
+                                <label className="text-sm font-medium mb-2 block">Update Status</label>
+                                <Select
+                                  value={runCase.status}
+                                  onValueChange={(value) => handleStatusChange(runCase, value as TestStatus)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="passed">Passed</SelectItem>
+                                    <SelectItem value="failed">Failed</SelectItem>
+                                    <SelectItem value="blocked">Blocked</SelectItem>
+                                    <SelectItem value="in_progress">In Progress</SelectItem>
+                                    <SelectItem value="not_run">Not Run</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </CanShow>
                             {testCase && (
                               <div>
                                 <label className="text-sm font-medium mb-2 block">Test Steps</label>

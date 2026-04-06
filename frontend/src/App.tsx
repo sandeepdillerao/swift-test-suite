@@ -21,6 +21,7 @@ import { Integrations } from "@/pages/app/Integrations";
 import { UserManagement } from "@/pages/app/UserManagement";
 import { Settings } from "@/pages/app/Settings";
 import { Projects } from "@/pages/app/Projects";
+import { RolesPermissions } from "@/pages/app/RolesPermissions";
 import AiReviewPage from "@/pages/app/AiReviewPage";
 import NotFound from "./pages/NotFound";
 
@@ -65,6 +66,7 @@ const App = () => (
                 <Route path="releases" element={<Releases />} />
                 <Route path="integrations" element={<Integrations />} />
                 <Route path="users" element={<UserManagement />} />
+                <Route path="roles" element={<RolesPermissions />} />
                 <Route path="ai-review" element={<AiReviewPage />} />
                 <Route path="settings" element={<Settings />} />
               </Route>

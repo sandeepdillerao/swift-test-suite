@@ -51,6 +51,8 @@ import {
   useDeleteUser,
 } from '@/hooks/useUsers';
 import type { User } from '@/types';
+import { usePermissions } from '@/hooks/usePermissions';
+import { PermissionGuard } from '@/components/auth/PermissionGuard';
 
 const roleLabels: Record<string, { label: string; color: string }> = {
   admin: { label: 'Admin', color: 'bg-destructive text-destructive-foreground' },
@@ -67,6 +69,7 @@ interface InviteFormData {
 }
 
 export const UserManagement = () => {
+  const { can } = usePermissions();
   const { data: usersResponse, isLoading } = useUsers({ limit: 50 });
   const users: User[] = usersResponse?.data ?? [];
   const inviteUser = useInviteUser();
@@ -165,10 +168,12 @@ export const UserManagement = () => {
             Manage team members and their roles
           </p>
         </div>
-        <Button className="gap-2" onClick={openInviteDialog}>
-          <Plus className="h-4 w-4" />
-          Invite User
-        </Button>
+        {can('users:invite') && (
+          <Button className="gap-2" onClick={openInviteDialog}>
+            <Plus className="h-4 w-4" />
+            Invite User
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
@@ -264,50 +269,62 @@ export const UserManagement = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
-                    <Select
-                      value={user.role}
-                      onValueChange={(value) => handleRoleChange(user, value as User['role'])}
-                    >
-                      <SelectTrigger className="w-[110px] h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="qa_lead">QA Lead</SelectItem>
-                        <SelectItem value="tester">Tester</SelectItem>
-                        <SelectItem value="viewer">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
-                          {user.isActive ? (
+                    {can('users:update_role') ? (
+                      <Select
+                        value={user.role}
+                        onValueChange={(value) => handleRoleChange(user, value as User['role'])}
+                      >
+                        <SelectTrigger className="w-[110px] h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="qa_lead">QA Lead</SelectItem>
+                          <SelectItem value="tester">Tester</SelectItem>
+                          <SelectItem value="viewer">Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">{roleLabels[user.role]?.label || user.role}</Badge>
+                    )}
+                    {(can('users:activate') || can('users:delete')) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {can('users:activate') && (
+                            <DropdownMenuItem onClick={() => handleToggleStatus(user)}>
+                              {user.isActive ? (
+                                <>
+                                  <UserX className="mr-2 h-4 w-4" />
+                                  Deactivate
+                                </>
+                              ) : (
+                                <>
+                                  <UserCheck className="mr-2 h-4 w-4" />
+                                  Activate
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                          )}
+                          {can('users:delete') && (
                             <>
-                              <UserX className="mr-2 h-4 w-4" />
-                              Deactivate
-                            </>
-                          ) : (
-                            <>
-                              <UserCheck className="mr-2 h-4 w-4" />
-                              Activate
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setDeleteDialog({ open: true, user })}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Remove
+                              </DropdownMenuItem>
                             </>
                           )}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteDialog({ open: true, user })}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Remove
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
               );

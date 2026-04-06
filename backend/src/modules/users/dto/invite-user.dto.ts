@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -16,6 +17,11 @@ export class InviteUserDto {
   @ApiProperty({ enum: UserRole })
   @IsEnum(UserRole)
   role: UserRole;
+
+  @ApiPropertyOptional({ description: 'RBAC role ID (overrides legacy role enum)' })
+  @IsOptional()
+  @IsUUID()
+  roleId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

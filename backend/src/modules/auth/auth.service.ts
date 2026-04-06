@@ -16,6 +16,7 @@ import { generateSecureToken, hashToken, slugify } from '@/common/utils/hash.uti
 import { Organization } from '@/modules/organizations/entities/organization.entity';
 import { User, UserRole } from '@/modules/users/entities/user.entity';
 import { UsersService } from '@/modules/users/users.service';
+import { RbacService } from '@/modules/rbac/rbac.service';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshToken } from './entities/refresh-token.entity';
 
@@ -33,13 +34,14 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private usersService: UsersService,
+    private rbacService: RbacService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.userRepository.findOne({
       where: { email },
       select: [
-        'id', 'email', 'passwordHash', 'role', 'isActive',
+        'id', 'email', 'passwordHash', 'role', 'roleId', 'isActive',
         'isEmailVerified', 'organizationId', 'firstName', 'lastName',
         'avatarUrl', 'lastLoginAt', 'settings', 'createdAt', 'updatedAt',
       ],
@@ -77,6 +79,9 @@ export class AuthService {
       });
       organization = await this.orgRepository.save(organization);
       role = UserRole.ADMIN;
+
+      // Seed default RBAC roles for the new organization
+      await this.rbacService.seedDefaultRolesForOrg(organization.id);
     } else if (dto.inviteToken) {
       const tokenHash = hashToken(dto.inviteToken);
       const invitedUser = await this.userRepository.findOne({
@@ -104,6 +109,9 @@ export class AuthService {
     const verificationToken = generateSecureToken();
     const verificationTokenHash = hashToken(verificationToken);
 
+    // Resolve the RBAC roleId from the legacy enum
+    const rbacRole = await this.rbacService.findRoleBySlug(organization.id, role);
+
     const user = this.userRepository.create({
       email: dto.email,
       passwordHash,
@@ -111,6 +119,7 @@ export class AuthService {
       lastName: dto.lastName,
       organizationId: organization.id,
       role,
+      roleId: rbacRole?.id ?? null,
       isActive: false,
       isEmailVerified: false,
       inviteToken: verificationTokenHash,
@@ -263,6 +272,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      roleId: user.roleId || null,
       orgId: user.organizationId,
       type: 'access',
     };

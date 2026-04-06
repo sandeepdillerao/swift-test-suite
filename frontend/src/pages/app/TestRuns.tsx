@@ -37,6 +37,8 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
 import type { TestRun } from '@/types';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 
 const statusConfig = {
   active: { label: 'Active', className: 'bg-primary/10 text-primary', icon: Play },
@@ -46,6 +48,7 @@ const statusConfig = {
 
 export const TestRuns = () => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const { currentProject } = useProjectStore();
   const projectId = currentProject?.id;
   const { data: testRuns = [], isLoading } = useTestRuns(projectId);
@@ -233,19 +236,25 @@ export const TestRuns = () => {
                     <Eye className="mr-2 h-4 w-4" />
                     View Details
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(run); }}>
-                    <Edit className="mr-2 h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
+                  {can('test_runs:update') && (
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(run); }}>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); exportReport(run); }}>
                     <Download className="mr-2 h-4 w-4" />
                     Export Report
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(run); }}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete
-                  </DropdownMenuItem>
+                  {can('test_runs:delete') && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(run); }}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -310,10 +319,12 @@ export const TestRuns = () => {
             Execute and track test execution progress
           </p>
         </div>
-        <Button className="gap-2" onClick={handleCreate}>
-          <Plus className="h-4 w-4" />
-          New Test Run
-        </Button>
+        <CanShow permission="test_runs:create">
+          <Button className="gap-2" onClick={handleCreate}>
+            <Plus className="h-4 w-4" />
+            New Test Run
+          </Button>
+        </CanShow>
       </div>
 
       {/* Tabs for filtering */}
@@ -341,10 +352,12 @@ export const TestRuns = () => {
               <p className="text-muted-foreground text-sm mt-1">
                 Start a new test run to execute your test cases
               </p>
-              <Button className="mt-4 gap-2" onClick={handleCreate}>
-                <Plus className="h-4 w-4" />
-                Start Test Run
-              </Button>
+              <CanShow permission="test_runs:create">
+                <Button className="mt-4 gap-2" onClick={handleCreate}>
+                  <Plus className="h-4 w-4" />
+                  Start Test Run
+                </Button>
+              </CanShow>
             </Card>
           ) : (
             activeRuns.map((run) => <RunCard key={run.id} run={run} />)

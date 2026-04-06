@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@/types';
+import { usePermissionStore } from '@/stores/permissionStore';
 
 interface AuthState {
   user: User | null;
@@ -26,10 +27,15 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setLoading: (isLoading) => set({ isLoading }),
       setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
-      login: (user, accessToken, refreshToken) =>
-        set({ user, accessToken, refreshToken, isAuthenticated: true, isLoading: false }),
-      logout: () =>
-        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false }),
+      login: (user, accessToken, refreshToken) => {
+        // Clear stale permissions so they are re-fetched for the new user
+        usePermissionStore.getState().clear();
+        set({ user, accessToken, refreshToken, isAuthenticated: true, isLoading: false });
+      },
+      logout: () => {
+        usePermissionStore.getState().clear();
+        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+      },
     }),
     {
       name: 'auth-storage',

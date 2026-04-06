@@ -31,6 +31,8 @@ import { useProjectStore } from '@/stores/projectStore';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CanShow } from '@/components/auth/PermissionGuard';
 import type { Project } from '@/types';
 
 const PROJECT_COLORS = [
@@ -46,6 +48,7 @@ function projectColor(key: string) {
 
 export const Projects = () => {
   const navigate = useNavigate();
+  const { can } = usePermissions();
   const { data: projects = [], isLoading } = useProjects();
   const createProject = useCreateProject();
   const updateProject = useUpdateProject();
@@ -179,14 +182,18 @@ export const Projects = () => {
                     : <><Archive className="mr-2 h-4 w-4" />Archive</>
                   }
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={(e) => { e.stopPropagation(); handleDeletePrompt(project); }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
+                {can('projects:delete') && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={(e) => { e.stopPropagation(); handleDeletePrompt(project); }}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -214,10 +221,12 @@ export const Projects = () => {
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
           <p className="text-muted-foreground">Manage and switch between testing projects</p>
         </div>
-        <Button className="gap-2" onClick={handleCreate}>
-          <Plus className="h-4 w-4" />
-          New Project
-        </Button>
+        <CanShow permission="projects:create">
+          <Button className="gap-2" onClick={handleCreate}>
+            <Plus className="h-4 w-4" />
+            New Project
+          </Button>
+        </CanShow>
       </div>
 
       {/* Stats row */}
