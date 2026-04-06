@@ -1,0 +1,183 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* TestFlow - Modern Test Case Management Design System */
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 173 80% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 92%;
+    --secondary-foreground: 220 25% 20%;
+
+    --muted: 220 15% 94%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent: 173 80% 40%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 173 80% 40%;
+
+    --radius: 0.625rem;
+
+    /* Custom gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(173 80% 40%) 0%, hsl(190 80% 45%) 100%);
+    --gradient-glow: linear-gradient(135deg, hsl(173 80% 40% / 0.2) 0%, hsl(190 80% 45% / 0.1) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(220 20% 98%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(220 20% 97%) 0%, hsl(220 25% 94%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px hsl(220 25% 10% / 0.04);
+    --shadow-md: 0 4px 12px hsl(220 25% 10% / 0.08);
+    --shadow-lg: 0 12px 40px hsl(220 25% 10% / 0.12);
+    --shadow-glow: 0 0 60px hsl(173 80% 40% / 0.15);
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 25% 20%;
+    --sidebar-primary: 173 80% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 173 80% 95%;
+    --sidebar-accent-foreground: 173 80% 30%;
+    --sidebar-border: 220 15% 90%;
+    --sidebar-ring: 173 80% 40%;
+  }
+
+  .dark {
+    --background: 222 25% 8%;
+    --foreground: 210 20% 95%;
+
+    --card: 222 25% 11%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 222 25% 11%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 173 80% 45%;
+    --primary-foreground: 222 25% 8%;
+
+    --secondary: 222 20% 16%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 222 20% 14%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 173 80% 45%;
+    --accent-foreground: 222 25% 8%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 76% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 0%;
+
+    --border: 222 20% 18%;
+    --input: 222 20% 18%;
+    --ring: 173 80% 45%;
+
+    /* Dark mode gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(173 80% 45%) 0%, hsl(190 80% 50%) 100%);
+    --gradient-glow: linear-gradient(135deg, hsl(173 80% 45% / 0.15) 0%, hsl(190 80% 50% / 0.08) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(222 25% 12%) 0%, hsl(222 25% 10%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(222 25% 8%) 0%, hsl(222 25% 6%) 100%);
+
+    /* Dark mode shadows */
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.2);
+    --shadow-md: 0 4px 12px hsl(0 0% 0% / 0.3);
+    --shadow-lg: 0 12px 40px hsl(0 0% 0% / 0.4);
+    --shadow-glow: 0 0 80px hsl(173 80% 45% / 0.2);
+
+    --sidebar-background: 222 25% 10%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 173 80% 45%;
+    --sidebar-primary-foreground: 222 25% 8%;
+    --sidebar-accent: 173 80% 20%;
+    --sidebar-accent-foreground: 173 80% 80%;
+    --sidebar-border: 222 20% 16%;
+    --sidebar-ring: 173 80% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50;
+    box-shadow: var(--shadow-md);
+  }
+
+  .glass-card-elevated {
+    @apply bg-card/90 backdrop-blur-xl border border-border/60;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .glow-effect {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-primary);
+  }
+
+  .status-passed {
+    @apply bg-success/10 text-success border-success/20;
+  }
+
+  .status-failed {
+    @apply bg-destructive/10 text-destructive border-destructive/20;
+  }
+
+  .status-blocked {
+    @apply bg-warning/10 text-warning border-warning/20;
+  }
+
+  .status-not-run {
+    @apply bg-muted text-muted-foreground border-border;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

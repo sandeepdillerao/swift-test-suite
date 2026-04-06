@@ -1,0 +1,24 @@
+import { httpClient } from '../http-client';
+import type { TestSuite } from '@/types';
+
+export const testSuitesService = {
+  list: (projectId: string) =>
+    httpClient
+      .get<{ data: TestSuite[] } | TestSuite[]>('/test-suites', { params: { projectId } })
+      .then((r) => {
+        const payload = r.data as any;
+        return (Array.isArray(payload) ? payload : payload.data) as TestSuite[];
+      }),
+
+  get: (id: string) =>
+    httpClient.get<TestSuite>(`/test-suites/${id}`).then((r) => r.data),
+
+  create: (data: Partial<TestSuite>) =>
+    httpClient.post<TestSuite>('/test-suites', data).then((r) => r.data),
+
+  update: (id: string, data: Partial<TestSuite>) =>
+    httpClient.patch<TestSuite>(`/test-suites/${id}`, data).then((r) => r.data),
+
+  delete: (id: string) =>
+    httpClient.delete(`/test-suites/${id}`).then((r) => r.data),
+};
