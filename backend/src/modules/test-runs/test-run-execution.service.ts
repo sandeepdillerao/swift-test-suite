@@ -44,11 +44,13 @@ export class TestRunExecutionService {
       throw new BadRequestException('No automated test cases to execute');
     }
 
-    // Resolve environment baseUrl
+    // Resolve environment baseUrl and variables
     let targetUrl: string | undefined;
+    let envVariables: Record<string, string> = {};
     if (run.environmentId) {
       const env = await this.environmentsService.findByIdWithCredentials(run.environmentId);
       targetUrl = env.baseUrl;
+      envVariables = env.variables || {};
     }
 
     // Mark run as executing
@@ -59,7 +61,7 @@ export class TestRunExecutionService {
     this.logger.log(`Starting execution of ${caseCount} automated cases for run ${testRunId}`);
 
     // Run in background (fire-and-forget, errors caught internally)
-    this.runAutomatedCases(testRunId, automatedCases, userId, targetUrl).catch((err) => {
+    this.runAutomatedCases(testRunId, automatedCases, userId, targetUrl, envVariables).catch((err) => {
       this.logger.error(`Execution failed for run ${testRunId}: ${err.message}`);
     });
 
@@ -103,6 +105,7 @@ export class TestRunExecutionService {
     cases: { id: string; scriptId: string | null; testCaseId: string }[],
     userId: string,
     targetUrl?: string,
+    variables?: Record<string, string>,
   ): Promise<void> {
     try {
       for (const runCase of cases) {
@@ -126,6 +129,7 @@ export class TestRunExecutionService {
             targetUrl,
             headless: true,
             enableHealing: true,
+            variables,
           });
 
           // Wait for completion

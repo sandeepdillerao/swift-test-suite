@@ -59,6 +59,8 @@ import { CanShow } from '@/components/auth/PermissionGuard';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
+import { useScriptExecution } from '@/hooks/useAutomation';
+import { ExecutionResultsPanel } from '@/components/automation/ExecutionResultsPanel';
 import type { TestStatus, TestRunCase } from '@/types';
 
 const statusConfig: Record<TestStatus, { label: string; className: string; icon: typeof CheckCircle2 }> = {
@@ -570,6 +572,13 @@ export const TestRunDetail = () => {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <CardContent className="pt-0 pb-4 px-4 border-t">
+                        {/* Automation Execution Results */}
+                        {runCase.executionMode === 'automated' && runCase.scriptExecutionId && (
+                          <div className="pt-4 pb-2">
+                            <AutomatedCaseResults scriptExecutionId={runCase.scriptExecutionId} />
+                          </div>
+                        )}
+
                         <div className="grid md:grid-cols-2 gap-6 pt-4">
                           <div className="space-y-4">
                             <CanShow permission="test_runs:execute">
@@ -743,6 +752,29 @@ export const TestRunDetail = () => {
     </div>
   );
 };
+
+// ─── Automated Case Results (fetches ScriptExecution and shows Result/Logs/Assets) ──
+
+function AutomatedCaseResults({ scriptExecutionId }: { scriptExecutionId: string }) {
+  const { data: execution, isLoading } = useScriptExecution(scriptExecutionId);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground ml-2">Loading execution results...</span>
+      </div>
+    );
+  }
+
+  if (!execution) {
+    return (
+      <p className="text-xs text-muted-foreground text-center py-4">Execution data not available</p>
+    );
+  }
+
+  return <ExecutionResultsPanel execution={execution} />;
+}
 
 // ─── Report Panel ────────────────────────────────────────────────────────────
 

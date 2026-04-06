@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   Play, Sparkles, Upload, Code2, Clock, CheckCircle2, XCircle,
@@ -28,10 +28,18 @@ import {
   useCancelExecution, useStartCodegen, useCodegenStatus, useStopCodegen,
   useCompleteCodegen,
 } from '@/hooks/useAutomation';
-import { httpClient } from '@/services/http-client';
 import type { AutomationScript, ScriptExecution, BrowserType, StructuredLogs } from '@/types';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
+import {
+  getExecutionStatusConfig,
+  useParsedLogs as useSharedParsedLogs,
+  ExecutionSummary,
+  ErrorBlock,
+  HealingInfo,
+  StepResultItem,
+  ExecutionArtifacts,
+} from './ExecutionResultsPanel';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -88,7 +96,7 @@ const BROWSER_OPTIONS: { value: BrowserType; label: string }[] = [
 ];
 
 function getStatusConfig(status: string) {
-  return STATUS_CONFIG[status] || STATUS_CONFIG.draft;
+  return getExecutionStatusConfig(status);
 }
 
 function copyToClipboard(text: string) {
@@ -1157,266 +1165,6 @@ function ExecutionItem({ exec, isExpanded, onToggle }: { exec: ScriptExecution; 
   );
 }
 
-// ─── Shared UI Blocks ────────────────────────────────────────────────────────
+// ─── Re-export useParsedLogs from shared module ─────────────────────────────
 
-function ErrorBlock({ title, message }: { title: string; message: string }) {
-  return (
-    <div>
-      <p className="text-xs font-medium text-red-500 mb-1 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{title}</p>
-      <pre className="text-xs bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-300 p-3 rounded border border-red-200 dark:border-red-800 overflow-auto max-h-[200px] whitespace-pre-wrap">
-        {message}
-      </pre>
-    </div>
-  );
-}
-
-function HealingInfo({ details }: { details: ScriptExecution['healingDetails'] }) {
-  if (!details) return null;
-  return (
-    <div className="p-2 rounded bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 text-xs">
-      <p className="font-medium text-purple-600 flex items-center gap-1 mb-1"><Shield className="h-3 w-3" />Self-Healing Applied</p>
-      <p className="text-muted-foreground">
-        Attempt {details.attempt} via {details.provider}/{details.model}
-        {details.timestamp && ` at ${format(new Date(details.timestamp), 'HH:mm:ss')}`}
-      </p>
-    </div>
-  );
-}
-
-// ─── Step Result Item ────────────────────────────────────────────────────────
-
-function StepResultItem({ step, index }: { step: StructuredLogs['steps'][number]; index: number }) {
-  const [expanded, setExpanded] = useState(false);
-  const cfg = getStatusConfig(step.status);
-  const StatusIcon = cfg.icon;
-  const hasActions = step.actions && step.actions.length > 0;
-  const hasDetails = hasActions || step.error || step.snippet;
-
-  return (
-    <div className={`rounded border text-xs ${cfg.bg}`}>
-      <button
-        onClick={() => hasDetails && setExpanded(!expanded)}
-        className={`w-full flex items-start gap-2 p-2 text-left ${hasDetails ? 'cursor-pointer hover:bg-muted/30' : 'cursor-default'}`}
-      >
-        {hasDetails ? (
-          expanded ? <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <StatusIcon className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${cfg.color}`} />
-        )}
-        <StatusIcon className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${cfg.color}`} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-medium">
-              <span className="text-muted-foreground mr-1">#{index + 1}</span>
-              {step.name}
-            </span>
-            <div className="flex items-center gap-2 shrink-0">
-              <Badge variant={step.status === 'passed' ? 'default' : step.status === 'failed' ? 'destructive' : 'secondary'} className="text-[10px] h-4 px-1.5">
-                {step.status}
-              </Badge>
-              <span className="text-muted-foreground">{step.duration}</span>
-            </div>
-          </div>
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="px-3 pb-3 pt-0 space-y-2 border-t ml-5">
-          {hasActions && (
-            <div className="space-y-0.5 mt-2">
-              {step.actions!.map((action, ai) => (
-                <div
-                  key={ai}
-                  className={`flex items-center gap-2 py-1 px-2 rounded ${
-                    action.status === 'passed' ? 'bg-green-50/50 dark:bg-green-950/10' : 'bg-red-50/50 dark:bg-red-950/10'
-                  }`}
-                >
-                  {action.status === 'passed' ? (
-                    <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                  ) : (
-                    <XCircle className="h-3 w-3 text-red-500 shrink-0" />
-                  )}
-                  <span className="flex-1 font-mono text-[11px] truncate" title={action.title}>{action.title}</span>
-                  <span className="text-muted-foreground text-[10px] shrink-0">{action.duration}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {step.error && (
-            <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words text-[11px] bg-red-50 dark:bg-red-950/20 p-2 rounded mt-2">{step.error}</pre>
-          )}
-          {step.snippet && (
-            <pre className="text-muted-foreground whitespace-pre-wrap text-[11px] bg-muted p-2 rounded">{step.snippet}</pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Execution Summary Bar ───────────────────────────────────────────────────
-
-function ExecutionSummary({ logs }: { logs: StructuredLogs }) {
-  const { summary } = logs;
-  const passPercent = summary.totalTests > 0
-    ? Math.round((summary.passedTests / summary.totalTests) * 100)
-    : (summary.passed ? 100 : 0);
-
-  return (
-    <div className="flex items-center gap-4 p-2 rounded bg-muted/30 text-xs">
-      <span className="font-medium">{summary.duration}</span>
-      <Separator orientation="vertical" className="h-4" />
-      <div className="flex items-center gap-3">
-        {summary.totalTests > 0 ? (
-          <>
-            {summary.passedTests > 0 && (
-              <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-3 w-3" />{summary.passedTests} passed</span>
-            )}
-            {summary.failedTests > 0 && (
-              <span className="flex items-center gap-1 text-red-500"><XCircle className="h-3 w-3" />{summary.failedTests} failed</span>
-            )}
-            {summary.skippedTests > 0 && (
-              <span className="flex items-center gap-1 text-muted-foreground">{summary.skippedTests} skipped</span>
-            )}
-          </>
-        ) : (
-          <span className="flex items-center gap-1 text-muted-foreground">
-            {summary.passed ? (
-              <><CheckCircle2 className="h-3 w-3 text-green-500" />All checks passed</>
-            ) : (
-              <><XCircle className="h-3 w-3 text-red-500" />Execution failed</>
-            )}
-          </span>
-        )}
-      </div>
-      <div className="ml-auto">
-        <Badge variant={passPercent === 100 ? 'default' : passPercent > 0 ? 'secondary' : 'destructive'}>
-          {passPercent}% pass rate
-        </Badge>
-      </div>
-    </div>
-  );
-}
-
-// ─── Artifact Helpers ────────────────────────────────────────────────────────
-
-function useArtifactBlobUrl(executionId: string, filename: string | null): string | null {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!filename) return;
-    let objectUrl = '';
-    let cancelled = false;
-
-    httpClient
-      .get(`/automation/executions/${executionId}/artifacts/${filename}`, { responseType: 'blob' })
-      .then((r) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(r.data as Blob);
-        setBlobUrl(objectUrl);
-      })
-      .catch(() => { if (!cancelled) setBlobUrl(null); });
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [executionId, filename]);
-
-  return blobUrl;
-}
-
-function ExecutionArtifacts({ exec }: { exec: ScriptExecution }) {
-  const [previewIdx, setPreviewIdx] = useState<number | null>(null);
-  const hasScreenshots = exec.screenshots && exec.screenshots.length > 0;
-  const hasVideo = !!exec.videoPath;
-
-  if (!hasScreenshots && !hasVideo) return null;
-
-  return (
-    <div className="space-y-2">
-      <p className="text-xs font-medium flex items-center gap-1"><ImageIcon className="h-3 w-3" />Artifacts</p>
-      {hasScreenshots && (
-        <div className="flex gap-2 flex-wrap">
-          {exec.screenshots.map((filename, i) => (
-            <ArtifactThumbnail key={i} executionId={exec.id} filename={filename} index={i} onClick={() => setPreviewIdx(i)} />
-          ))}
-        </div>
-      )}
-      {hasVideo && <ArtifactVideo executionId={exec.id} filename={exec.videoPath!} />}
-      {previewIdx !== null && hasScreenshots && (
-        <ArtifactPreviewDialog executionId={exec.id} filename={exec.screenshots[previewIdx]} onClose={() => setPreviewIdx(null)} />
-      )}
-    </div>
-  );
-}
-
-function ArtifactThumbnail({ executionId, filename, index, onClick }: { executionId: string; filename: string; index: number; onClick: () => void }) {
-  const blobUrl = useArtifactBlobUrl(executionId, filename);
-  return (
-    <button onClick={onClick} className="group relative w-24 h-16 rounded border overflow-hidden hover:ring-2 ring-primary transition-all bg-muted">
-      {blobUrl ? (
-        <img src={blobUrl} alt={`Screenshot ${index + 1}`} className="w-full h-full object-cover" />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      )}
-      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-        <Eye className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-      </div>
-    </button>
-  );
-}
-
-function ArtifactVideo({ executionId, filename }: { executionId: string; filename: string }) {
-  const blobUrl = useArtifactBlobUrl(executionId, filename);
-  if (!blobUrl) {
-    return (
-      <div className="rounded border bg-black h-[200px] flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-white/50" />
-      </div>
-    );
-  }
-  return (
-    <div className="rounded border overflow-hidden bg-black">
-      <video controls className="w-full max-h-[300px]" src={blobUrl}>Your browser does not support the video tag.</video>
-    </div>
-  );
-}
-
-function ArtifactPreviewDialog({ executionId, filename, onClose }: { executionId: string; filename: string; onClose: () => void }) {
-  const blobUrl = useArtifactBlobUrl(executionId, filename);
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl p-2">
-        {blobUrl ? (
-          <img src={blobUrl} alt="Screenshot preview" className="w-full rounded" />
-        ) : (
-          <div className="h-[400px] flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function useParsedLogs(rawLogs: string | null): StructuredLogs | null {
-  return useMemo(() => {
-    if (!rawLogs) return null;
-    try {
-      return JSON.parse(rawLogs) as StructuredLogs;
-    } catch {
-      return {
-        summary: { passed: false, duration: '?', totalTests: 0, passedTests: 0, failedTests: 0, skippedTests: 0 },
-        steps: [],
-        error: null,
-        stdout: rawLogs,
-        stderr: null,
-      };
-    }
-  }, [rawLogs]);
-}
+const useParsedLogs = useSharedParsedLogs;

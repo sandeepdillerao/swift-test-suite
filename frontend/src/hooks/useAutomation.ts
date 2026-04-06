@@ -148,6 +148,14 @@ export const useScriptExecutions = (scriptId?: string, limit = 20) => {
   });
 };
 
+export const useScriptExecution = (executionId?: string) => {
+  return useQuery({
+    queryKey: ['scriptExecution', executionId],
+    queryFn: () => api.automation.getExecution(executionId!),
+    enabled: !!executionId,
+  });
+};
+
 export const useTestCaseExecutions = (testCaseId?: string, limit = 20) => {
   return useQuery({
     queryKey: ['scriptExecutions', 'testCase', testCaseId, limit],

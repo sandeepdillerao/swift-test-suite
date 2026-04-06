@@ -374,6 +374,15 @@ export class AutomationService {
         scriptContent = `// Target URL: ${targetUrl}\n${scriptContent}`;
       }
 
+      // Inject environment variables as constants at the top of the script
+      const envVars = dto.variables || {};
+      if (Object.keys(envVars).length > 0) {
+        const varLines = Object.entries(envVars)
+          .map(([key, value]) => `const ${key} = ${JSON.stringify(value)};`)
+          .join('\n');
+        scriptContent = `// ── Environment Variables ──\n${varLines}\n\n${scriptContent}`;
+      }
+
       // Resolve node_modules
       const backendRoot = path.resolve(__dirname, '..', '..', '..');
       let nodeModulesPath = path.join(backendRoot, 'node_modules');
@@ -388,9 +397,16 @@ export class AutomationService {
       const configPath = path.join(tmpDir, 'playwright.config.ts');
       const headless = dto.headless !== false;
       const browser = dto.browserType || script.browserType || 'chromium';
+
+      // Build process.env assignments for environment variables
+      const envAssignments = Object.entries(envVars)
+        .map(([key, value]) => `process.env[${JSON.stringify(key)}] = ${JSON.stringify(value)};`)
+        .join('\n');
+
       fs.writeFileSync(
         configPath,
         `const { defineConfig } = require('@playwright/test');
+${envAssignments ? `\n// Inject environment variables\n${envAssignments}\n` : ''}
 module.exports = defineConfig({
   testDir: '.',
   timeout: 60000,
