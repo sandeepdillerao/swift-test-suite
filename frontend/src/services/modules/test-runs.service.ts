@@ -1,7 +1,8 @@
 import { httpClient } from '../http-client';
-import type { TestRun, TestRunCase, TestRunHistory } from '@/types';
+import type { TestRun, TestRunCase, TestRunHistory, ExecutionProgress, SuiteAutomationSummary } from '@/types';
 
 export const testRunsService = {
+  // ── CRUD ───────────────────────────────────────────────────────────────
   list: (params?: { projectId?: string }) =>
     httpClient
       .get<{ data: TestRun[] } | TestRun[]>('/test-runs', { params })
@@ -22,13 +23,29 @@ export const testRunsService = {
   delete: (id: string) =>
     httpClient.delete(`/test-runs/${id}`).then((r) => r.data),
 
+  // ── History ────────────────────────────────────────────────────────────
   getHistory: (runId: string) =>
-    httpClient
-      .get<TestRunHistory[]>(`/test-runs/${runId}/history`)
-      .then((r) => r.data),
+    httpClient.get<TestRunHistory[]>(`/test-runs/${runId}/history`).then((r) => r.data),
 
+  // ── Case update ────────────────────────────────────────────────────────
   updateTestCase: (runId: string, testCaseId: string, data: Partial<TestRunCase>) =>
-    httpClient
-      .patch<TestRunCase>(`/test-runs/${runId}/cases/${testCaseId}`, data)
-      .then((r) => r.data),
+    httpClient.patch<TestRunCase>(`/test-runs/${runId}/cases/${testCaseId}`, data).then((r) => r.data),
+
+  // ── Automation execution ───────────────────────────────────────────────
+  execute: (runId: string) =>
+    httpClient.post<{ started: number }>(`/test-runs/${runId}/execute`).then((r) => r.data),
+
+  getExecutionProgress: (runId: string) =>
+    httpClient.get<ExecutionProgress>(`/test-runs/${runId}/execution-progress`).then((r) => r.data),
+
+  cancelExecution: (runId: string) =>
+    httpClient.post(`/test-runs/${runId}/cancel-execution`).then((r) => r.data),
+
+  // ── Report ──────────────────────────────────────────────────────────────
+  getReport: (runId: string) =>
+    httpClient.get<any>(`/test-runs/${runId}/report`).then((r) => r.data),
+
+  // ── Suite automation summary ───────────────────────────────────────────
+  getSuiteAutomationSummary: (suiteId: string) =>
+    httpClient.get<SuiteAutomationSummary>(`/test-runs/suite/${suiteId}/automation-summary`).then((r) => r.data),
 };

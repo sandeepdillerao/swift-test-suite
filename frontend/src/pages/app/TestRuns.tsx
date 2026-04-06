@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Play, 
-  Plus, 
+  Play,
+  Plus,
   CheckCircle2,
   Clock,
   Archive,
@@ -14,7 +14,12 @@ import {
   Tag,
   XCircle,
   AlertTriangle,
-  MinusCircle
+  MinusCircle,
+  Bot,
+  User as UserIcon,
+  Server,
+  Loader2,
+  Zap,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -40,8 +45,9 @@ import type { TestRun } from '@/types';
 import { usePermissions } from '@/hooks/usePermissions';
 import { CanShow } from '@/components/auth/PermissionGuard';
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; className: string; icon: any }> = {
   active: { label: 'Active', className: 'bg-primary/10 text-primary', icon: Play },
+  executing: { label: 'Executing', className: 'bg-amber-500/10 text-amber-600', icon: Zap },
   completed: { label: 'Completed', className: 'bg-green-500/10 text-green-600', icon: CheckCircle2 },
   archived: { label: 'Archived', className: 'bg-muted text-muted-foreground', icon: Archive },
 };
@@ -154,16 +160,19 @@ export const TestRuns = () => {
     return release ? `${release.name} (${release.version})` : null;
   };
 
-  const getStatusBreakdown = (run: TestRun) => {
-    const passed = run.testCases.filter(tc => tc.status === 'passed').length;
-    const failed = run.testCases.filter(tc => tc.status === 'failed').length;
-    const blocked = run.testCases.filter(tc => tc.status === 'blocked').length;
-    const notRun = run.testCases.filter(tc => tc.status === 'not_run').length;
-    const total = run.testCases.length;
-    return { passed, failed, blocked, notRun, total };
+  const getRunStats = (run: TestRun) => {
+    const cases = run.testCases || [];
+    const passed = cases.filter(tc => tc.status === 'passed').length;
+    const failed = cases.filter(tc => tc.status === 'failed').length;
+    const blocked = cases.filter(tc => tc.status === 'blocked').length;
+    const notRun = cases.filter(tc => tc.status === 'not_run').length;
+    const total = cases.length;
+    const automated = cases.filter(tc => tc.executionMode === 'automated').length;
+    const manual = cases.filter(tc => tc.executionMode === 'manual').length;
+    return { passed, failed, blocked, notRun, total, automated, manual };
   };
 
-  const activeRuns = testRuns.filter(r => r.status === 'active');
+  const activeRuns = testRuns.filter(r => r.status === 'active' || r.status === 'executing');
   const completedRuns = testRuns.filter(r => r.status === 'completed');
   const archivedRuns = testRuns.filter(r => r.status === 'archived');
 
@@ -176,11 +185,12 @@ export const TestRuns = () => {
   }
 
   const RunCard = ({ run }: { run: TestRun }) => {
-    const statusInfo = statusConfig[run.status];
+    const statusInfo = statusConfig[run.status] || statusConfig.active;
     const StatusIcon = statusInfo.icon;
-    const breakdown = getStatusBreakdown(run);
+    const stats = getRunStats(run);
     const releaseName = getReleaseName(run.releaseId);
-    
+    const envName = run.environmentConfig?.name || run.environment;
+
     return (
       <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/app/test-runs/${run.id}`)}>
         <CardContent className="p-6">
@@ -190,31 +200,39 @@ export const TestRuns = () => {
                 <StatusIcon className={cn('h-5 w-5', statusInfo.className.split(' ')[1])} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1 flex-wrap">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h3 className="font-semibold text-lg">{run.name}</h3>
-                  <Badge variant="outline" className={statusInfo.className}>
-                    {statusInfo.label}
-                  </Badge>
+                  <Badge variant="outline" className={statusInfo.className}>{statusInfo.label}</Badge>
                   {releaseName && (
-                    <Badge variant="secondary" className="gap-1">
-                      <Tag className="h-3 w-3" />
-                      {releaseName}
-                    </Badge>
+                    <Badge variant="secondary" className="gap-1"><Tag className="h-3 w-3" />{releaseName}</Badge>
                   )}
                 </div>
                 {run.description && (
                   <p className="text-sm text-muted-foreground mb-2 line-clamp-1">{run.description}</p>
                 )}
-                <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    Started {formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
+                    <Clock className="h-3.5 w-3.5" />
+                    {formatDistanceToNow(new Date(run.startedAt), { addSuffix: true })}
                   </span>
-                  {run.environment && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded">{run.environment}</span>
+                  {envName && (
+                    <span className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded">
+                      <Server className="h-3 w-3" />{envName}
+                    </span>
                   )}
                   {run.buildNumber && (
-                    <span className="text-xs font-mono text-muted-foreground">{run.buildNumber}</span>
+                    <span className="font-mono">{run.buildNumber}</span>
+                  )}
+                  {/* Automated / Manual breakdown */}
+                  {(stats.automated > 0 || stats.manual > 0) && (
+                    <span className="flex items-center gap-2">
+                      {stats.automated > 0 && (
+                        <span className="flex items-center gap-1"><Bot className="h-3 w-3" />{stats.automated} auto</span>
+                      )}
+                      {stats.manual > 0 && (
+                        <span className="flex items-center gap-1"><UserIcon className="h-3 w-3" />{stats.manual} manual</span>
+                      )}
+                    </span>
                   )}
                 </div>
               </div>
@@ -227,31 +245,25 @@ export const TestRuns = () => {
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                  <Button variant="ghost" size="icon">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
+                  <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/app/test-runs/${run.id}`); }}>
-                    <Eye className="mr-2 h-4 w-4" />
-                    View Details
+                    <Eye className="mr-2 h-4 w-4" /> View Details
                   </DropdownMenuItem>
                   {can('test_runs:update') && (
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEdit(run); }}>
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
+                      <Edit className="mr-2 h-4 w-4" /> Edit
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); exportReport(run); }}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Export Report
+                    <Download className="mr-2 h-4 w-4" /> Export Report
                   </DropdownMenuItem>
                   {can('test_runs:delete') && (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="text-destructive" onClick={(e) => { e.stopPropagation(); handleDelete(run); }}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
                       </DropdownMenuItem>
                     </>
                   )}
@@ -260,48 +272,21 @@ export const TestRuns = () => {
             </div>
           </div>
 
-          {/* Progress Bar with Status Breakdown */}
+          {/* Progress Bar */}
           <div className="mt-4 pt-4 border-t">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-3 text-sm">
-                <span className="flex items-center gap-1 text-green-600">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  {breakdown.passed}
-                </span>
-                <span className="flex items-center gap-1 text-destructive">
-                  <XCircle className="h-3.5 w-3.5" />
-                  {breakdown.failed}
-                </span>
-                <span className="flex items-center gap-1 text-orange-500">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  {breakdown.blocked}
-                </span>
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <MinusCircle className="h-3.5 w-3.5" />
-                  {breakdown.notRun}
-                </span>
+                <span className="flex items-center gap-1 text-green-600"><CheckCircle2 className="h-3.5 w-3.5" />{stats.passed}</span>
+                <span className="flex items-center gap-1 text-destructive"><XCircle className="h-3.5 w-3.5" />{stats.failed}</span>
+                <span className="flex items-center gap-1 text-orange-500"><AlertTriangle className="h-3.5 w-3.5" />{stats.blocked}</span>
+                <span className="flex items-center gap-1 text-muted-foreground"><MinusCircle className="h-3.5 w-3.5" />{stats.notRun}</span>
               </div>
-              <span className="text-sm text-muted-foreground">{breakdown.total} test cases</span>
+              <span className="text-sm text-muted-foreground">{stats.total} cases</span>
             </div>
             <div className="flex h-2 rounded-full overflow-hidden bg-muted">
-              {breakdown.passed > 0 && (
-                <div 
-                  className="bg-green-500 transition-all" 
-                  style={{ width: `${(breakdown.passed / breakdown.total) * 100}%` }} 
-                />
-              )}
-              {breakdown.failed > 0 && (
-                <div 
-                  className="bg-destructive transition-all" 
-                  style={{ width: `${(breakdown.failed / breakdown.total) * 100}%` }} 
-                />
-              )}
-              {breakdown.blocked > 0 && (
-                <div 
-                  className="bg-orange-500 transition-all" 
-                  style={{ width: `${(breakdown.blocked / breakdown.total) * 100}%` }} 
-                />
-              )}
+              {stats.passed > 0 && <div className="bg-green-500 transition-all" style={{ width: `${(stats.passed / stats.total) * 100}%` }} />}
+              {stats.failed > 0 && <div className="bg-destructive transition-all" style={{ width: `${(stats.failed / stats.total) * 100}%` }} />}
+              {stats.blocked > 0 && <div className="bg-orange-500 transition-all" style={{ width: `${(stats.blocked / stats.total) * 100}%` }} />}
             </div>
           </div>
         </CardContent>

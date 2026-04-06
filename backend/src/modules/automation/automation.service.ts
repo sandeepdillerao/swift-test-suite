@@ -12,7 +12,7 @@ import { AutomationScript } from './entities/automation-script.entity';
 import { ScriptExecution } from './entities/script-execution.entity';
 import { ScriptStatus, ExecutionStatus, BrowserType, ScriptSource } from './entities/automation.enums';
 import { TestCase } from '@/modules/test-cases/entities/test-case.entity';
-import { TestStatus } from '@/modules/test-cases/entities/test-case.enums';
+import { TestStatus, TestType } from '@/modules/test-cases/entities/test-case.enums';
 import { User } from '@/modules/users/entities/user.entity';
 import { SettingsService, AiProvider } from '@/modules/settings/settings.service';
 import { AiAuditService } from '@/common/modules/ai-audit';
@@ -464,10 +464,11 @@ module.exports = defineConfig({
         stabilityScore,
       });
 
-      // Update test case status
+      // Update test case status + auto-promote to automated type on pass
       await this.testCaseRepo.update(script.testCaseId, {
         status: passed ? TestStatus.PASSED : TestStatus.FAILED,
         lastRunAt: new Date(),
+        ...(passed && { type: TestType.AUTOMATED }),
       });
 
       // Self-healing on failure

@@ -19,7 +19,12 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
-  ExternalLink
+  ExternalLink,
+  Zap,
+  Square,
+  Loader2,
+  Bot,
+  BarChart3,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,7 +49,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { useTestRun, useTestRunHistory, useUpdateTestRun, useUpdateTestRunCase } from '@/hooks/useTestRuns';
+import { useTestRun, useTestRunHistory, useUpdateTestRun, useUpdateTestRunCase, useExecuteTestRun, useCancelTestRunExecution, useExecutionProgress, useTestRunReport } from '@/hooks/useTestRuns';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useReleases } from '@/hooks/useReleases';
 import { useUsers } from '@/hooks/useUsers';
 import { useAuthStore } from '@/stores/authStore';
@@ -75,6 +81,11 @@ export const TestRunDetail = () => {
   const users: any[] = (usersData as any)?.data ?? (usersData as any)?.users ?? (Array.isArray(usersData) ? usersData : []);
   const updateTestRun = useUpdateTestRun();
   const updateTestRunCase = useUpdateTestRunCase();
+  const executeTestRun = useExecuteTestRun();
+  const cancelExecution = useCancelTestRunExecution();
+
+  const isRunExecuting = testRun?.status === 'executing';
+  const { data: autoExecProgress } = useExecutionProgress(id, isRunExecuting);
 
   const [expandedCase, setExpandedCase] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -109,6 +120,9 @@ export const TestRunDetail = () => {
   const total = testRun.testCases.length;
   const executed = passed + failed + blocked;
   const executionProgress = total > 0 ? Math.round((executed / total) * 100) : 0;
+  const automatedNotRun = testRun.testCases.filter(tc => tc.executionMode === 'automated' && tc.status === 'not_run').length;
+  const automatedTotal = testRun.testCases.filter(tc => tc.executionMode === 'automated').length;
+  const manualTotal = testRun.testCases.filter(tc => tc.executionMode === 'manual').length;
 
   const filteredCases = statusFilter === 'all' 
     ? testRun.testCases 
@@ -266,8 +280,32 @@ export const TestRunDetail = () => {
             </DropdownMenuContent>
           </DropdownMenu>
           <CanShow permission="test_runs:update">
+            {/* Execute Automated Tests button */}
+            {(testRun.status === 'active') && automatedNotRun > 0 && (
+              <Button
+                onClick={() => executeTestRun.mutate(testRun.id)}
+                disabled={executeTestRun.isPending}
+                className="gap-2"
+                variant="default"
+              >
+                {executeTestRun.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Run Automated ({automatedNotRun})
+              </Button>
+            )}
+            {/* Cancel execution button */}
+            {isRunExecuting && (
+              <Button
+                onClick={() => cancelExecution.mutate(testRun.id)}
+                disabled={cancelExecution.isPending}
+                variant="destructive"
+                className="gap-2"
+              >
+                {cancelExecution.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                Cancel Execution
+              </Button>
+            )}
             {testRun.status === 'active' && (
-              <Button onClick={handleCompleteRun} className="gap-2">
+              <Button onClick={handleCompleteRun} variant="outline" className="gap-2">
                 <CheckCircle2 className="h-4 w-4" />
                 Complete Run
               </Button>
@@ -275,6 +313,28 @@ export const TestRunDetail = () => {
           </CanShow>
         </div>
       </div>
+
+      {/* Execution Progress Bar */}
+      {isRunExecuting && autoExecProgress && (
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3 mb-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm font-medium">Executing automated tests...</span>
+              <span className="text-sm text-muted-foreground ml-auto">
+                {autoExecProgress.completed} / {autoExecProgress.total} completed
+              </span>
+            </div>
+            <Progress value={autoExecProgress.total > 0 ? (autoExecProgress.completed / autoExecProgress.total) * 100 : 0} className="h-2" />
+            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+              {autoExecProgress.passed > 0 && <span className="text-green-600">{autoExecProgress.passed} passed</span>}
+              {autoExecProgress.failed > 0 && <span className="text-red-500">{autoExecProgress.failed} failed</span>}
+              {autoExecProgress.running > 0 && <span className="text-primary">{autoExecProgress.running} running</span>}
+              {autoExecProgress.pending > 0 && <span>{autoExecProgress.pending} pending</span>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -442,6 +502,10 @@ export const TestRunDetail = () => {
             <History className="h-4 w-4" />
             Execution History ({history.length})
           </TabsTrigger>
+          <TabsTrigger value="report" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Report
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="testcases" className="space-y-4 mt-4">
@@ -485,6 +549,13 @@ export const TestRunDetail = () => {
                             {testCase?.tcId ?? '—'}
                           </span>
                           <span className="flex-1 font-medium">{testCase?.title || 'Unknown Test Case'}</span>
+                          {runCase.executionMode === 'automated' ? (
+                            <Badge variant="secondary" className="text-[10px] gap-1 shrink-0">
+                              <Bot className="h-3 w-3" /> Auto
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] shrink-0">Manual</Badge>
+                          )}
                           <Badge variant="outline" className={statusInfo.className}>
                             {statusInfo.label}
                           </Badge>
@@ -663,7 +734,227 @@ export const TestRunDetail = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Report Tab */}
+        <TabsContent value="report" className="mt-4">
+          <ReportPanel testRunId={testRun.id} />
+        </TabsContent>
       </Tabs>
     </div>
   );
 };
+
+// ─── Report Panel ────────────────────────────────────────────────────────────
+
+const CHART_COLORS = {
+  passed: '#22c55e',
+  failed: '#ef4444',
+  blocked: '#f97316',
+  notRun: '#a1a1aa',
+  automated: '#6366f1',
+  manual: '#f59e0b',
+};
+
+function ReportPanel({ testRunId }: { testRunId: string }) {
+  const { data: report, isLoading } = useTestRunReport(testRunId);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center h-48">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!report) return null;
+
+  const { summary, defects, timeline } = report;
+
+  // Pie chart data — overall pass/fail/blocked/notRun
+  const pieData = [
+    { name: 'Passed', value: summary.automated.passed + summary.manual.passed, color: CHART_COLORS.passed },
+    { name: 'Failed', value: summary.automated.failed + summary.manual.failed, color: CHART_COLORS.failed },
+    { name: 'Blocked', value: summary.automated.blocked + summary.manual.blocked, color: CHART_COLORS.blocked },
+    { name: 'Not Run', value: summary.automated.notRun + summary.manual.notRun, color: CHART_COLORS.notRun },
+  ].filter(d => d.value > 0);
+
+  // Bar chart data — automated vs manual
+  const barData = [
+    {
+      category: 'Automated',
+      passed: summary.automated.passed,
+      failed: summary.automated.failed,
+      blocked: summary.automated.blocked,
+      notRun: summary.automated.notRun,
+      total: summary.automated.total,
+    },
+    {
+      category: 'Manual',
+      passed: summary.manual.passed,
+      failed: summary.manual.failed,
+      blocked: summary.manual.blocked,
+      notRun: summary.manual.notRun,
+      total: summary.manual.total,
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <SummaryCard label="Total Cases" value={summary.totalCases} />
+        <SummaryCard label="Overall Pass Rate" value={`${summary.overallPassRate}%`} className="text-green-600" />
+        <SummaryCard label="Automated" value={summary.automated.total} sub={`${summary.automated.passRate}% pass`} />
+        <SummaryCard label="Manual" value={summary.manual.total} sub={`${summary.manual.passRate}% pass`} />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Pass Rate Pie */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Status Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" paddingAngle={2} label={({ name, value }) => `${name}: ${value}`}>
+                  {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Automated vs Manual Bar */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Automated vs Manual</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={barData}>
+                <XAxis dataKey="category" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="passed" name="Passed" fill={CHART_COLORS.passed} stackId="stack" />
+                <Bar dataKey="failed" name="Failed" fill={CHART_COLORS.failed} stackId="stack" />
+                <Bar dataKey="blocked" name="Blocked" fill={CHART_COLORS.blocked} stackId="stack" />
+                <Bar dataKey="notRun" name="Not Run" fill={CHART_COLORS.notRun} stackId="stack" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Duration Summary */}
+      {(summary.automated.totalDuration > 0 || summary.manual.totalDuration > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Execution Duration</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-xs text-muted-foreground">Total</span>
+                <p className="font-semibold">{formatDuration(summary.automated.totalDuration + summary.manual.totalDuration)}</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Automated</span>
+                <p className="font-semibold">{formatDuration(summary.automated.totalDuration)}</p>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground">Manual</span>
+                <p className="font-semibold">{formatDuration(summary.manual.totalDuration)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Defects */}
+      {defects.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-destructive" /> Defects ({defects.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {defects.map((d: any, i: number) => (
+                <div key={i} className="flex items-center gap-3 p-2 rounded border text-sm">
+                  <Badge variant="outline" className="font-mono text-xs shrink-0">{d.tcId || '—'}</Badge>
+                  <span className="flex-1 truncate">{d.title}</span>
+                  <div className="flex gap-1">
+                    {d.defects.map((def: string, j: number) => (
+                      <Badge key={j} variant="destructive" className="text-xs">{def}</Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Execution Timeline */}
+      {timeline.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Execution Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+              {timeline.map((t: any, i: number) => {
+                const sc = statusConfig[t.status as TestStatus] || statusConfig.not_run;
+                const Icon = sc.icon;
+                return (
+                  <div key={i} className="flex items-center gap-3 text-sm py-1.5">
+                    <span className="text-xs text-muted-foreground w-20 shrink-0 font-mono">
+                      {t.executedAt ? format(new Date(t.executedAt), 'HH:mm:ss') : '—'}
+                    </span>
+                    <Icon className={cn('h-3.5 w-3.5 shrink-0', sc.className.split(' ')[1])} />
+                    <Badge variant="outline" className="text-[10px] font-mono shrink-0">{t.tcId || '—'}</Badge>
+                    <span className="truncate flex-1">{t.title}</span>
+                    <Badge variant={t.executionMode === 'automated' ? 'secondary' : 'outline'} className="text-[10px] shrink-0">
+                      {t.executionMode === 'automated' ? '🤖 Auto' : 'Manual'}
+                    </Badge>
+                    {t.duration != null && (
+                      <span className="text-xs text-muted-foreground shrink-0">{t.duration}s</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, sub, className }: { label: string; value: string | number; sub?: string; className?: string }) {
+  return (
+    <Card>
+      <CardContent className="pt-4 pb-4">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <p className={cn('text-2xl font-bold', className)}>{value}</p>
+        {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds === 0) return '0s';
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+}

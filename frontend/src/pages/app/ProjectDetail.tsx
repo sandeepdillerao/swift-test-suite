@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Users, Settings, Plus, Trash2, UserPlus, Shield, Link2,
   Clock, Key, Loader2, MoreHorizontal, FolderKanban, Check, ChevronsUpDown, X,
-  Pencil, Archive, ArchiveRestore,
+  Pencil, Archive, ArchiveRestore, Server,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
 import { useProject, useUpdateProject, useDeleteProject } from '@/hooks/useProjects';
 import { ProjectDialog } from '@/components/projects/ProjectDialog';
+import { EnvironmentsPanel } from '@/components/environments/EnvironmentsPanel';
 import { useProjectMembers, useAddProjectMember, useRemoveProjectMember, useRoles } from '@/hooks/useRbac';
 import { useUsers } from '@/hooks/useUsers';
 import { useJiraConfig, useJiraProjects } from '@/hooks/useIntegrations';
@@ -169,6 +170,9 @@ export const ProjectDetail = () => {
           <TabsTrigger value="members" className="gap-1.5">
             <Users className="h-3.5 w-3.5" /> Members
           </TabsTrigger>
+          <TabsTrigger value="environments" className="gap-1.5">
+            <Server className="h-3.5 w-3.5" /> Environments
+          </TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5">
             <Settings className="h-3.5 w-3.5" /> Settings
           </TabsTrigger>
@@ -176,6 +180,10 @@ export const ProjectDetail = () => {
 
         <TabsContent value="members" className="mt-4">
           <MembersPanel projectId={project.id} canManage={can('projects:update')} />
+        </TabsContent>
+
+        <TabsContent value="environments" className="mt-4">
+          <EnvironmentsPanel projectId={project.id} canManage={can('projects:update')} />
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4">

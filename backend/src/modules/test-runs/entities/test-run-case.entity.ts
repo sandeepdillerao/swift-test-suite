@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGenerat
 import { TestCase } from '@/modules/test-cases/entities/test-case.entity';
 import { TestStatus } from '@/modules/test-cases/entities/test-case.enums';
 import { TestRun } from './test-run.entity';
+import { ExecutionMode } from './test-run.enums';
 
 @Entity('test_run_cases')
 export class TestRunCase {
@@ -15,6 +16,16 @@ export class TestRunCase {
   @Column({ type: 'text', nullable: true }) comment: string | null;
   @Column({ type: 'text', array: true, default: '{}' }) defects: string[];
   @Column({ type: 'text', nullable: true }) actualResult: string | null;
+
+  /** Whether this case should be auto-executed or manually tested */
+  @Column({ type: 'varchar', length: 20, default: ExecutionMode.MANUAL }) executionMode: ExecutionMode;
+
+  /** The automation script to use for automated execution (null = manual) */
+  @Column({ type: 'uuid', nullable: true }) scriptId: string | null;
+
+  /** Links to the ScriptExecution result after automation runs */
+  @Column({ type: 'uuid', nullable: true }) scriptExecutionId: string | null;
+
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;
 

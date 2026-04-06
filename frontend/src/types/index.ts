@@ -139,7 +139,8 @@ export interface TestRun {
   description?: string;
   projectId: string;
   releaseId?: string;
-  status: 'active' | 'completed' | 'archived';
+  environmentId?: string;
+  status: 'active' | 'executing' | 'completed' | 'archived';
   testCases: TestRunCase[];
   createdBy: string;
   assignedTo?: string;
@@ -148,13 +149,19 @@ export interface TestRun {
   passRate: number;
   environment?: string;
   buildNumber?: string;
+  environmentConfig?: ProjectEnvironment;
 }
+
+export type ExecutionMode = 'automated' | 'manual';
 
 export interface TestRunCase {
   id: string;
   testCaseId: string;
   testRunId: string;
   status: TestStatus;
+  executionMode: ExecutionMode;
+  scriptId?: string;
+  scriptExecutionId?: string;
   executedBy?: string;
   executedAt?: string;
   duration?: number;
@@ -162,6 +169,45 @@ export interface TestRunCase {
   defects?: string[];
   actualResult?: string;
   testCase?: TestCase;
+}
+
+export interface ProjectEnvironment {
+  id: string;
+  projectId: string;
+  name: string;
+  baseUrl: string;
+  isDefault: boolean;
+  authConfigs: AuthConfig[];
+  variables: Record<string, string>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthConfig {
+  label: string;
+  username: string;
+  password: string;
+  role?: string;
+}
+
+export interface ExecutionProgress {
+  testRunId: string;
+  status: string;
+  total: number;
+  completed: number;
+  running: number;
+  pending: number;
+  passed: number;
+  failed: number;
+  isExecuting: boolean;
+}
+
+export interface SuiteAutomationSummary {
+  suiteId: string;
+  totalCases: number;
+  automatedCases: { testCaseId: string; title: string; scriptId: string }[];
+  manualCases: { testCaseId: string; title: string }[];
 }
 
 export interface TestRunHistory {

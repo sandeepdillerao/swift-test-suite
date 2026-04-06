@@ -21,7 +21,8 @@ import { settingsService } from './modules/settings.service';
 import { integrationsService } from './modules/integrations.service';
 import { automationService } from './modules/automation.service';
 import { rbacService } from './modules/rbac.service';
-import type { Project, TestCase, TestRun, TestRunCase, Release } from '@/types';
+import { environmentsService } from './modules/environments.service';
+import type { Project, TestCase, TestRun, TestRunCase, Release, ProjectEnvironment } from '@/types';
 
 export const api = {
   // ── Auth ────────────────────────────────────────────────────────────────────
@@ -176,6 +177,15 @@ export const api = {
     deactivate: usersService.deactivate,
     updateRole: usersService.updateRole,
     delete: usersService.delete,
+  },
+
+  // ── Environments ──────────────────────────────────────────────────────────
+  environments: {
+    list: (projectId: string) => environmentsService.list(projectId),
+    get: (projectId: string, id: string) => environmentsService.get(projectId, id),
+    create: (projectId: string, data: Partial<ProjectEnvironment>) => environmentsService.create(projectId, data),
+    update: (projectId: string, id: string, data: Partial<ProjectEnvironment>) => environmentsService.update(projectId, id, data),
+    delete: (projectId: string, id: string) => environmentsService.delete(projectId, id),
   },
 };
 

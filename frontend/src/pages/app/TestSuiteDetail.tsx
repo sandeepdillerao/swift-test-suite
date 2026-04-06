@@ -7,7 +7,10 @@ import {
   Plus,
   TestTube2,
   FolderTree,
-  Calendar
+  Calendar,
+  Zap,
+  Loader2,
+  Bot,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +20,18 @@ import { TestCaseDialog } from '@/components/testcases/TestCaseDialog';
 import { DeleteConfirmDialog } from '@/components/testcases/DeleteConfirmDialog';
 import { useTestSuite, useTestSuites, useUpdateTestSuite, useDeleteTestSuite } from '@/hooks/useTestSuites';
 import { useTestCases, useCreateTestCase } from '@/hooks/useTestCases';
+import { useCreateTestRun, useSuiteAutomationSummary } from '@/hooks/useTestRuns';
+import { useEnvironments } from '@/hooks/useEnvironments';
 import { useProjectStore } from '@/stores/projectStore';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { usePermissions } from '@/hooks/usePermissions';
 import { CanShow } from '@/components/auth/PermissionGuard';
 import type { TestSuite, TestCase } from '@/types';
@@ -37,10 +51,18 @@ export const TestSuiteDetail = () => {
   const updateSuite = useUpdateTestSuite();
   const deleteSuite = useDeleteTestSuite();
   const createTestCase = useCreateTestCase();
+  const createTestRun = useCreateTestRun();
+
+  const { data: automationSummary } = useSuiteAutomationSummary(id);
+  const { data: environments = [] } = useEnvironments(projectId);
+  const automatedCount = automationSummary?.automatedCases?.length ?? 0;
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addCaseDialogOpen, setAddCaseDialogOpen] = useState(false);
+  const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [runEnvId, setRunEnvId] = useState('');
+  const [runBuild, setRunBuild] = useState('');
 
   const isLoading = suiteLoading || casesLoading;
 
@@ -92,6 +114,28 @@ export const TestSuiteDetail = () => {
     });
   };
 
+  const handleRunSuite = () => {
+    if (!projectId || !id) return;
+    createTestRun.mutate(
+      {
+        name: `Suite Run — ${suite.name} — ${new Date().toLocaleDateString()}`,
+        projectId,
+        suiteId: id,
+        environmentId: runEnvId || undefined,
+        buildNumber: runBuild || undefined,
+        includeManualCases: true,
+      },
+      {
+        onSuccess: (run: any) => {
+          setRunDialogOpen(false);
+          toast.success('Test run created from suite');
+          navigate(`/app/test-runs/${run.id}`);
+        },
+        onError: (e: any) => toast.error(e.message || 'Failed to create test run'),
+      },
+    );
+  };
+
   const handleSaveTestCase = (data: Partial<TestCase>) => {
     createTestCase.mutate(
       { ...data, suiteId: suite.id, projectId },
@@ -127,6 +171,12 @@ export const TestSuiteDetail = () => {
           </div>
         </div>
         <div className="flex gap-2">
+          {automatedCount > 0 && (
+            <Button size="sm" onClick={() => setRunDialogOpen(true)} className="gap-1.5">
+              <Zap className="h-4 w-4" />
+              Run Suite ({automatedCount} auto)
+            </Button>
+          )}
           <CanShow permission="test_suites:update">
             <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
               <Pencil className="h-4 w-4 mr-2" />
@@ -295,6 +345,60 @@ export const TestSuiteDetail = () => {
         suites={[{ id: suite.id, name: suite.name }]}
         onSave={handleSaveTestCase}
       />
+
+      {/* Run Suite Dialog */}
+      <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Run Suite</DialogTitle>
+            <DialogDescription>
+              Create a test run from this suite with automated execution
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {automationSummary && (
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="p-2 rounded bg-muted/50">
+                  <p className="text-lg font-bold">{automationSummary.totalCases}</p>
+                  <p className="text-xs text-muted-foreground">Total</p>
+                </div>
+                <div className="p-2 rounded bg-green-500/10">
+                  <p className="text-lg font-bold text-green-600">{automationSummary.automatedCases.length}</p>
+                  <p className="text-xs text-green-600">Automated</p>
+                </div>
+                <div className="p-2 rounded bg-amber-500/10">
+                  <p className="text-lg font-bold text-amber-600">{automationSummary.manualCases.length}</p>
+                  <p className="text-xs text-amber-600">Manual</p>
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Environment</Label>
+              <Select value={runEnvId} onValueChange={setRunEnvId}>
+                <SelectTrigger><SelectValue placeholder="Select environment..." /></SelectTrigger>
+                <SelectContent>
+                  {environments.map(env => (
+                    <SelectItem key={env.id} value={env.id}>
+                      {env.name} {env.isDefault && '(Default)'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Build Number <span className="text-xs text-muted-foreground font-normal">(optional)</span></Label>
+              <Input placeholder="e.g., build-2024.01.15" value={runBuild} onChange={(e) => setRunBuild(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRunDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleRunSuite} disabled={createTestRun.isPending}>
+              {createTestRun.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
+              Create & Run
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
