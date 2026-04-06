@@ -25,7 +25,7 @@ export class ProjectsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List projects' })
+  @ApiOperation({ summary: 'List projects (filtered by membership for non-admins)' })
   @ApiQuery({ name: 'page', required: false }) @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'search', required: false }) @ApiQuery({ name: 'isArchived', required: false })
   findAll(
@@ -34,7 +34,7 @@ export class ProjectsController {
     @Query('sortBy') sortBy = 'createdAt', @Query('sortOrder') sortOrder: 'ASC' | 'DESC' = 'DESC',
     @Query('search') search?: string, @Query('isArchived') isArchived?: boolean,
   ) {
-    return this.service.findAll(user.organizationId, +page, +limit, sortBy, sortOrder, search, isArchived);
+    return this.service.findAll(user.organizationId, user.id, user.role, +page, +limit, sortBy, sortOrder, search, isArchived);
   }
 
   @Get(':id')

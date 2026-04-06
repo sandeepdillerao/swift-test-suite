@@ -94,6 +94,19 @@ export function useAddProjectMember() {
   });
 }
 
+export function useUpdateProjectMemberRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId, userId, roleId }: { projectId: string; userId: string; roleId: string }) =>
+      api.rbac.updateProjectMemberRole(projectId, userId, roleId),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: keys.projectMembers(vars.projectId) });
+      toast.success('Member role updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update role'),
+  });
+}
+
 export function useRemoveProjectMember() {
   const qc = useQueryClient();
   return useMutation({

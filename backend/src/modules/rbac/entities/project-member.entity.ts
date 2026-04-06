@@ -24,9 +24,9 @@ export class ProjectMember {
   @Column({ type: 'uuid' })
   userId: string;
 
-  /** Project-specific role override */
-  @Column({ type: 'uuid' })
-  roleId: string;
+  /** Project-specific role override (null = inherit org-level role) */
+  @Column({ type: 'uuid', nullable: true })
+  roleId: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   addedBy: string | null;

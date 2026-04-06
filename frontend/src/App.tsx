@@ -21,6 +21,7 @@ import { Integrations } from "@/pages/app/Integrations";
 import { UserManagement } from "@/pages/app/UserManagement";
 import { Settings } from "@/pages/app/Settings";
 import { Projects } from "@/pages/app/Projects";
+import { ProjectDetail } from "@/pages/app/ProjectDetail";
 import { RolesPermissions } from "@/pages/app/RolesPermissions";
 import AiReviewPage from "@/pages/app/AiReviewPage";
 import NotFound from "./pages/NotFound";
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/app" element={<AppLayout />}>
                 <Route index element={<Dashboard />} />
                 <Route path="projects" element={<Projects />} />
+                <Route path="projects/:id" element={<ProjectDetail />} />
                 <Route path="test-cases" element={<TestCases />} />
                 <Route path="test-cases/:id" element={<TestCaseDetail />} />
                 <Route path="test-suites" element={<TestSuites />} />
