@@ -241,8 +241,8 @@ export class AutomationService {
 
     // Build the prompt — if codegen is provided, use the enhanced codegen-first flow
     const prompt = dto.codegenScript
-      ? this.buildCodegenEnhancedPrompt(testCase, dto.codegenScript, dto.targetUrl)
-      : this.buildGeneratePrompt(testCase, dto.targetUrl);
+      ? this.buildCodegenEnhancedPrompt(testCase, dto.codegenScript, dto.targetUrl, dto.variables, dto.authConfigs)
+      : this.buildGeneratePrompt(testCase, dto.targetUrl, dto.variables, dto.authConfigs);
 
     const startTime = Date.now();
     let aiResult: { content: string; inputTokens: number; outputTokens: number };
@@ -285,7 +285,7 @@ export class AutomationService {
     try {
       const { provider, model, apiKey } = await this.getAiCredentials(userId);
       const orgId = await this.getOrgId(userId);
-      const prompt = this.buildCodegenEnhancedPrompt(testCase, dto.rawScript, dto.targetUrl);
+      const prompt = this.buildCodegenEnhancedPrompt(testCase, dto.rawScript, dto.targetUrl, dto.variables, dto.authConfigs);
       const startTime = Date.now();
       let aiResult: { content: string; inputTokens: number; outputTokens: number };
       try {
@@ -591,7 +591,7 @@ module.exports = defineConfig({
                   title: s.title || 'Unknown action',
                   status: s.error ? 'failed' : 'passed',
                   duration: `${((s.duration || 0) / 1000).toFixed(2)}s`,
-                  error: s.error?.message,
+                  error: s.error?.message ? this.stripAnsi(s.error.message) : undefined,
                 });
                 // Include nested steps (test.step() inside test.step())
                 if (s.steps?.length) extractSteps(s.steps);
@@ -608,8 +608,8 @@ module.exports = defineConfig({
             };
 
             if (testFailed && result.error) {
-              stepEntry.error = result.error.message || '';
-              stepEntry.snippet = result.error.snippet || '';
+              stepEntry.error = this.stripAnsi(result.error.message || '');
+              stepEntry.snippet = this.stripAnsi(result.error.snippet || '');
               stepEntry.location = result.error.location
                 ? `${result.error.location.file}:${result.error.location.line}`
                 : '';
@@ -635,10 +635,16 @@ module.exports = defineConfig({
     return {
       summary,
       steps,
-      error,
-      stdout: stdout.trim() || null,
-      stderr: stderr.trim() || null,
+      error: error ? this.stripAnsi(error) : null,
+      stdout: this.stripAnsi(stdout.trim()) || null,
+      stderr: this.stripAnsi(stderr.trim()) || null,
     };
+  }
+
+  /** Remove ANSI escape codes (colors, cursor movement, etc.) from terminal output */
+  private stripAnsi(text: string): string {
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
   }
 
   private spawnPlaywright(playwrightBin: string, cwd: string, nodeModulesPath: string, executionId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
@@ -826,7 +832,81 @@ module.exports = defineConfig({
    * a production-ready script. Codegen provides real DOM selectors, AI adds
    * assertions, structure, error handling, and maps to test steps.
    */
-  private buildCodegenEnhancedPrompt(testCase: TestCase, codegenScript: string, targetUrl?: string): string {
+  private buildEnvironmentContext(
+    variables?: Record<string, string>,
+    authConfigs?: { label: string; username: string; password: string; role?: string }[],
+    targetUrl?: string,
+  ): string {
+    const hasVars = variables && Object.keys(variables).length > 0;
+    const hasAuth = authConfigs && authConfigs.length > 0;
+    if (!hasVars && !hasAuth && !targetUrl) return '';
+
+    const parts: string[] = [];
+
+    parts.push(`## ⚠️ CRITICAL: Runtime Variables — DO NOT HARDCODE
+
+The execution environment **automatically injects** variables at runtime. Your script MUST reference these by name — NEVER hardcode their values as string literals.
+
+Variables are available in two ways:
+1. **As top-level constants** — use the variable name directly (e.g. \`BASE_URL\`, \`API_KEY\`)
+2. **Via \`process.env\`** — e.g. \`process.env.BASE_URL\`
+
+**baseURL is set in the Playwright config automatically**, so use \`page.goto('/')\` or relative paths like \`page.goto('/dashboard')\` instead of full URLs.`);
+
+    if (hasVars) {
+      const varNames = Object.keys(variables!);
+      const varTable = varNames.map((key) => `  - \`${key}\` — available as constant \`${key}\` or \`process.env.${key}\``).join('\n');
+      parts.push(`### Available Variables
+${varTable}
+
+**CORRECT** usage:
+\`\`\`typescript
+await page.goto('/');              // baseURL is already configured
+await page.fill('#api-key', ${varNames[0]});  // use the constant directly
+const val = process.env.${varNames[0]};       // or via process.env
+\`\`\`
+
+**WRONG — do NOT do this:**
+\`\`\`typescript
+await page.goto('${variables![varNames[0]] || 'https://example.com'}');  // ❌ NEVER hardcode
+await page.fill('#api-key', '${variables![varNames[0]] || 'some-value'}'); // ❌ NEVER hardcode
+\`\`\``);
+    }
+
+    if (hasAuth) {
+      const authList = authConfigs!.map((a) => {
+        const constPrefix = a.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        return `  - **${a.label}**${a.role ? ` (role: ${a.role})` : ''}: use constants \`${constPrefix}_USERNAME\` and \`${constPrefix}_PASSWORD\``;
+      }).join('\n');
+
+      // Build the auth constant map that will be injected
+      const authConstants = authConfigs!.map((a) => {
+        const constPrefix = a.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        return `// ${constPrefix}_USERNAME, ${constPrefix}_PASSWORD — injected at runtime`;
+      }).join('\n');
+
+      parts.push(`### Auth Credentials
+${authList}
+
+These credentials are injected as runtime constants. For login flows:
+\`\`\`typescript
+${authConstants}
+await page.fill('[name="username"]', ${authConfigs![0].label.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_USERNAME);
+await page.fill('[name="password"]', ${authConfigs![0].label.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_PASSWORD);
+\`\`\`
+**NEVER write actual usernames or passwords as string literals in the script.**`);
+    }
+
+    return '\n\n' + parts.join('\n\n');
+  }
+
+  private buildCodegenEnhancedPrompt(
+    testCase: TestCase,
+    codegenScript: string,
+    targetUrl?: string,
+    variables?: Record<string, string>,
+    authConfigs?: { label: string; username: string; password: string; role?: string }[],
+  ): string {
     const stepsText = (testCase.steps as any[])
       .map((s, i) => `  Step ${i + 1}: ${s.action}\n    Expected: ${s.expectedResult}`)
       .join('\n');
@@ -872,12 +952,18 @@ ${codegenScript}
 5. **Remove codegen bloat** — remove page.waitForTimeout(), unnecessary navigations, duplicate actions
 6. **Add waitFor conditions** — replace hard waits with proper element waits (waitForSelector, expect().toBeVisible())
 7. **Error handling** — add try/catch for flaky parts, meaningful error messages
-${targetUrl ? `8. Use '${targetUrl}' as the base URL` : '8. Use relative paths for navigation'}
+8. **Navigation** — baseURL is configured in playwright.config, so use relative paths: \`page.goto('/')\`, \`page.goto('/dashboard')\`. NEVER hardcode full URLs.
+${this.buildEnvironmentContext(variables, authConfigs, targetUrl)}
 
 Return ONLY the Playwright TypeScript code. No explanations, no markdown fences.`;
   }
 
-  private buildGeneratePrompt(testCase: TestCase, targetUrl?: string): string {
+  private buildGeneratePrompt(
+    testCase: TestCase,
+    targetUrl?: string,
+    variables?: Record<string, string>,
+    authConfigs?: { label: string; username: string; password: string; role?: string }[],
+  ): string {
     const stepsText = (testCase.steps as any[])
       .map((s, i) => `  Step ${i + 1}: ${s.action}\n    Expected: ${s.expectedResult}`)
       .join('\n');
@@ -905,9 +991,9 @@ ${testCase.expectedResult || 'N/A'}
 5. Add meaningful test.describe and test() blocks
 6. Use async/await properly
 7. Add reasonable timeouts and waitFor conditions where needed
-8. Handle page navigation properly
+8. **Navigation** — baseURL is configured in playwright.config, so use relative paths: \`page.goto('/')\`, \`page.goto('/dashboard')\`. NEVER hardcode full URLs.
 9. Include comments mapping each code section back to the test step
-${targetUrl ? `10. Use '${targetUrl}' as the base URL for navigation` : '10. Use a configurable baseURL or relative paths'}
+${this.buildEnvironmentContext(variables, authConfigs, targetUrl)}
 
 Return ONLY the Playwright TypeScript code. No explanations, no markdown fences.`;
   }
@@ -1007,7 +1093,7 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
   }
 
   private extractErrorMessage(stderr: string, stdout: string): string {
-    const combined = stderr + '\n' + stdout;
+    const combined = this.stripAnsi(stderr + '\n' + stdout);
     const lines = combined.split('\n');
     const errorLines = lines.filter(
       (l) => l.includes('Error') || l.includes('error') || l.includes('FAIL') || l.includes('Timeout') || l.includes('expect('),

@@ -4,7 +4,7 @@ import {
   Play, Sparkles, Upload, Code2, Clock, CheckCircle2, XCircle,
   AlertCircle, Loader2, Trash2, Shield, Activity, ChevronDown,
   ChevronRight, Copy, Terminal, Eye, Monitor, Zap, Square, ImageIcon,
-  Maximize2, Minimize2,
+  Maximize2, Minimize2, Variable,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,6 +28,8 @@ import {
   useCancelExecution, useStartCodegen, useCodegenStatus, useStopCodegen,
   useCompleteCodegen,
 } from '@/hooks/useAutomation';
+import { useEnvironments } from '@/hooks/useEnvironments';
+import type { ProjectEnvironment } from '@/types';
 import type { AutomationScript, ScriptExecution, BrowserType, StructuredLogs } from '@/types';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
@@ -295,6 +297,7 @@ function UrlBrowserConfig({
 
 export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: AutomationPanelProps) => {
   const { data: scripts = [], isLoading } = useAutomationScripts(testCaseId);
+  const { data: environments = [] } = useEnvironments(projectId);
   const generateScript = useGenerateScript();
   const updateScript = useUpdateScript();
   const deleteScript = useDeleteScript();
@@ -312,8 +315,20 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
   const [codegenSessionId, setCodegenSessionId] = useState<string | null>(null);
   const [generationMode, setGenerationMode] = useState<GenerationMode>('record');
+  const [selectedEnvId, setSelectedEnvId] = useState<string>('');
 
   const { data: codegenStatus } = useCodegenStatus(codegenSessionId || undefined);
+
+  // Auto-select default environment and populate targetUrl
+  const selectedEnv = environments.find((e) => e.id === selectedEnvId);
+
+  useEffect(() => {
+    if (environments.length > 0 && !selectedEnvId) {
+      const defaultEnv = environments.find((e) => e.isDefault) || environments[0];
+      setSelectedEnvId(defaultEnv.id);
+      if (!targetUrl) setTargetUrl(defaultEnv.baseUrl);
+    }
+  }, [environments]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeScript = selectedScriptId
     ? scripts.find((s) => s.id === selectedScriptId)
@@ -365,6 +380,8 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
         targetUrl: targetUrl || undefined,
         browserType,
         codegenScript: codegenScript.trim() || undefined,
+        variables: selectedEnv?.variables && Object.keys(selectedEnv.variables).length > 0 ? selectedEnv.variables : undefined,
+        authConfigs: selectedEnv?.authConfigs && selectedEnv.authConfigs.length > 0 ? selectedEnv.authConfigs : undefined,
       },
       {
         onSuccess: (script) => {
@@ -380,17 +397,37 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
         onError: (err: any) => toast.error(err.message || 'Failed to generate script'),
       },
     );
-  }, [generateScript, testCaseId, projectId, targetUrl, browserType, codegenScript]);
+  }, [generateScript, testCaseId, projectId, targetUrl, browserType, codegenScript, selectedEnv]);
 
   const handleExecute = useCallback((script: AutomationScript, headless: boolean) => {
+    // Build merged variables: env vars + auth config constants
+    const mergedVars: Record<string, string> = { ...(selectedEnv?.variables || {}) };
+    if (selectedEnv?.authConfigs) {
+      for (const auth of selectedEnv.authConfigs) {
+        const prefix = auth.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        mergedVars[`${prefix}_USERNAME`] = auth.username;
+        mergedVars[`${prefix}_PASSWORD`] = auth.password;
+        if (auth.role) mergedVars[`${prefix}_ROLE`] = auth.role;
+      }
+    }
+    const hasVars = Object.keys(mergedVars).length > 0;
+
     executeScript.mutate(
-      { scriptId: script.id, options: { enableHealing: true, headless } },
+      {
+        scriptId: script.id,
+        options: {
+          enableHealing: true,
+          headless,
+          targetUrl: selectedEnv?.baseUrl || undefined,
+          ...(hasVars ? { variables: mergedVars } : {}),
+        },
+      },
       {
         onSuccess: () => toast.success('Execution started — watching progress...'),
         onError: (err: any) => toast.error(err.message || 'Failed to start execution'),
       },
     );
-  }, [executeScript]);
+  }, [executeScript, selectedEnv]);
 
   const handleCancel = useCallback((executionId: string) => {
     cancelExecution.mutate(executionId, {
@@ -498,6 +535,13 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
         isStoppingCodegen={stopCodegen.isPending}
         isCompletingCodegen={completeCodegen.isPending}
         isGenerating={generateScript.isPending}
+        environments={environments}
+        selectedEnvId={selectedEnvId}
+        onEnvChange={(envId) => {
+          setSelectedEnvId(envId);
+          const env = environments.find((e) => e.id === envId);
+          if (env) setTargetUrl(env.baseUrl);
+        }}
       />
     </div>
   );
@@ -576,6 +620,7 @@ function GenerateDialog({
   isRecording, recordingDone,
   onStartRecording, onStopRecording, onCompleteCodegen, onGenerate, onResetSession,
   isStartingCodegen, isStoppingCodegen, isCompletingCodegen, isGenerating,
+  environments, selectedEnvId, onEnvChange,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -600,7 +645,11 @@ function GenerateDialog({
   isStoppingCodegen: boolean;
   isCompletingCodegen: boolean;
   isGenerating: boolean;
+  environments: ProjectEnvironment[];
+  selectedEnvId: string;
+  onEnvChange: (envId: string) => void;
 }) {
+  const selectedEnv = environments.find((e) => e.id === selectedEnvId);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -612,6 +661,30 @@ function GenerateDialog({
         </DialogHeader>
 
         <div className="space-y-5 py-2">
+          {/* Environment Selector */}
+          {environments.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1">
+                  <Label className="text-sm">Environment</Label>
+                  <Select value={selectedEnvId} onValueChange={onEnvChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select environment..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {environments.map((env) => (
+                        <SelectItem key={env.id} value={env.id}>
+                          {env.name} {env.isDefault ? '(Default)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {selectedEnv && <EnvironmentVariablesHelper environment={selectedEnv} />}
+            </div>
+          )}
+
           <Tabs value={generationMode} onValueChange={(v) => onModeChange(v as GenerationMode)}>
             <TabsList className="w-full">
               <TabsTrigger value="record" className="flex-1 gap-1.5">
@@ -981,6 +1054,149 @@ function ScriptDetail({
         </div>
       </TabsContent>
     </Tabs>
+  );
+}
+
+// ─── Environment Variables Helper ────────────────────────────────────────────
+
+function EnvironmentVariablesHelper({ environment }: { environment: ProjectEnvironment }) {
+  const [expanded, setExpanded] = useState(false);
+  const varEntries = Object.entries(environment.variables);
+  const hasVars = varEntries.length > 0;
+  const hasAuth = environment.authConfigs.length > 0;
+
+  if (!hasVars && !hasAuth) return null;
+
+  return (
+    <Collapsible open={expanded} onOpenChange={setExpanded}>
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center gap-2 p-2.5 rounded-lg border bg-blue-50/50 dark:bg-blue-950/10 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-colors text-left">
+          {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-blue-500" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-blue-500" />}
+          <Code2 className="h-4 w-4 text-blue-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
+              Environment Variables & Auth
+            </span>
+            <span className="text-[10px] text-blue-500 dark:text-blue-500 ml-2">
+              {hasVars ? `${varEntries.length} variable${varEntries.length !== 1 ? 's' : ''}` : ''}
+              {hasVars && hasAuth ? ' · ' : ''}
+              {hasAuth ? `${environment.authConfigs.length} auth config${environment.authConfigs.length !== 1 ? 's' : ''}` : ''}
+            </span>
+          </div>
+          <Badge variant="secondary" className="text-[10px] shrink-0">
+            AI-aware
+          </Badge>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="mt-1 rounded-lg border p-3 space-y-4 text-xs bg-muted/20">
+          {/* How it works */}
+          <div className="space-y-1.5">
+            <p className="font-medium text-sm">How variables work in scripts</p>
+            <p className="text-muted-foreground">
+              When you generate or execute a script, environment variables are automatically injected. The AI will use these
+              variables in the generated script instead of hardcoding values. You can access them in two ways:
+            </p>
+          </div>
+
+          {/* Variables Table */}
+          {hasVars && (
+            <div className="space-y-2">
+              <p className="font-medium flex items-center gap-1.5">
+                <Variable className="h-3.5 w-3.5" /> Variables
+              </p>
+              <div className="rounded border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="text-left px-2 py-1.5 font-medium">Variable</th>
+                      <th className="text-left px-2 py-1.5 font-medium">Value</th>
+                      <th className="text-left px-2 py-1.5 font-medium">Usage in Script</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {varEntries.map(([key, value]) => (
+                      <tr key={key}>
+                        <td className="px-2 py-1.5 font-mono font-semibold text-primary">{key}</td>
+                        <td className="px-2 py-1.5 text-muted-foreground truncate max-w-[120px]">{value}</td>
+                        <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground">
+                          <code className="bg-muted px-1 rounded">{key}</code> or <code className="bg-muted px-1 rounded">process.env.{key}</code>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Auth Configs */}
+          {hasAuth && (
+            <div className="space-y-2">
+              <p className="font-medium flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5" /> Auth Configs
+              </p>
+              <div className="rounded border overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="text-left px-2 py-1.5 font-medium">Label</th>
+                      <th className="text-left px-2 py-1.5 font-medium">Role</th>
+                      <th className="text-left px-2 py-1.5 font-medium">Constants in Script</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {environment.authConfigs.map((auth, i) => {
+                      const prefix = auth.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+                      return (
+                        <tr key={i}>
+                          <td className="px-2 py-1.5 font-medium">{auth.label}</td>
+                          <td className="px-2 py-1.5 text-muted-foreground">{auth.role || '—'}</td>
+                          <td className="px-2 py-1.5 font-mono text-[11px]">
+                            <code className="bg-muted px-1 rounded text-primary">{prefix}_USERNAME</code>{' '}
+                            <code className="bg-muted px-1 rounded text-primary">{prefix}_PASSWORD</code>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-muted-foreground">
+                Credentials are injected as constants at runtime. AI-generated scripts use these names — never hardcoded passwords.
+              </p>
+            </div>
+          )}
+
+          {/* Code Examples */}
+          <div className="space-y-2">
+            <p className="font-medium">Example usage in Playwright script</p>
+            <pre className="bg-[#1e1e1e] text-[#d4d4d4] p-3 rounded text-[11px] font-mono overflow-x-auto">{[
+              '// baseURL is set in playwright config — use relative paths:',
+              "await page.goto('/');           // → baseURL",
+              "await page.goto('/dashboard');  // → baseURL + /dashboard",
+              '',
+              ...(varEntries.length > 0 ? [
+                '// Environment variables — injected as constants:',
+                ...varEntries.map(([key]) => `// const ${key} = "...";  (injected at runtime)`),
+                `await page.fill('#field', ${varEntries[0][0]});  // use constant directly`,
+                `const val = process.env.${varEntries[0][0]};     // or via process.env`,
+              ] : []),
+              '',
+              ...(hasAuth ? [
+                '// Auth credentials — injected as constants:',
+                ...environment.authConfigs.map((auth) => {
+                  const prefix = auth.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+                  return `// const ${prefix}_USERNAME = "...";  const ${prefix}_PASSWORD = "...";`;
+                }),
+                `await page.fill('[name="username"]', ${environment.authConfigs[0].label.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_USERNAME);`,
+                `await page.fill('[name="password"]', ${environment.authConfigs[0].label.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_PASSWORD);`,
+              ] : []),
+            ].join('\n')}</pre>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

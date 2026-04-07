@@ -133,7 +133,8 @@ export const TestRunDetail = () => {
   const getAssigneeName = (userId?: string) => {
     if (!userId) return null;
     const u = users.find((u: any) => u.id === userId);
-    return u ? (u.name || u.email) : userId.slice(0, 8);
+    if (!u) return userId.slice(0, 8);
+    return u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.displayName || u.email;
   };
 
   const handleStatusChange = async (runCase: TestRunCase, newStatus: TestStatus) => {

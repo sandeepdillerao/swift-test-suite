@@ -44,13 +44,15 @@ export class TestRunExecutionService {
       throw new BadRequestException('No automated test cases to execute');
     }
 
-    // Resolve environment baseUrl and variables
+    // Resolve environment baseUrl, variables, and auth configs
     let targetUrl: string | undefined;
     let envVariables: Record<string, string> = {};
+    let authConfigs: { label: string; username: string; password: string; role?: string }[] = [];
     if (run.environmentId) {
       const env = await this.environmentsService.findByIdWithCredentials(run.environmentId);
       targetUrl = env.baseUrl;
       envVariables = env.variables || {};
+      authConfigs = env.authConfigs || [];
     }
 
     // Mark run as executing
@@ -61,7 +63,7 @@ export class TestRunExecutionService {
     this.logger.log(`Starting execution of ${caseCount} automated cases for run ${testRunId}`);
 
     // Run in background (fire-and-forget, errors caught internally)
-    this.runAutomatedCases(testRunId, automatedCases, userId, targetUrl, envVariables).catch((err) => {
+    this.runAutomatedCases(testRunId, automatedCases, userId, targetUrl, envVariables, authConfigs).catch((err) => {
       this.logger.error(`Execution failed for run ${testRunId}: ${err.message}`);
     });
 
@@ -106,6 +108,7 @@ export class TestRunExecutionService {
     userId: string,
     targetUrl?: string,
     variables?: Record<string, string>,
+    authConfigs?: { label: string; username: string; password: string; role?: string }[],
   ): Promise<void> {
     try {
       for (const runCase of cases) {
@@ -125,11 +128,22 @@ export class TestRunExecutionService {
 
         try {
           // Trigger script execution
+          // Merge auth configs into variables as constants (e.g. ADMIN_USERNAME, ADMIN_PASSWORD)
+          const mergedVariables = { ...(variables || {}) };
+          if (authConfigs) {
+            for (const auth of authConfigs) {
+              const prefix = auth.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+              mergedVariables[`${prefix}_USERNAME`] = auth.username;
+              mergedVariables[`${prefix}_PASSWORD`] = auth.password;
+              if (auth.role) mergedVariables[`${prefix}_ROLE`] = auth.role;
+            }
+          }
+
           const execution = await this.automationService.executeScript(userId, runCase.scriptId, {
             targetUrl,
             headless: true,
             enableHealing: true,
-            variables,
+            variables: mergedVariables,
           });
 
           // Wait for completion

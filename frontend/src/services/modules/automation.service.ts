@@ -27,10 +27,16 @@ export const automationService = {
     httpClient.post<AutomationScript>(`/automation/codegen/${sessionId}/complete`).then((r) => r.data),
 
   // ─── Script Generation ──────────────────────────────────────────────────
-  generate: (data: { testCaseId: string; projectId: string; targetUrl?: string; browserType?: string; codegenScript?: string }) =>
+  generate: (data: {
+    testCaseId: string; projectId: string; targetUrl?: string; browserType?: string;
+    codegenScript?: string; variables?: Record<string, string>; authConfigs?: { label: string; username: string; password: string; role?: string }[];
+  }) =>
     httpClient.post<AutomationScript>('/automation/scripts/generate', data).then((r) => r.data),
 
-  importCodegen: (data: { testCaseId: string; projectId: string; rawScript: string; targetUrl?: string; browserType?: string }) =>
+  importCodegen: (data: {
+    testCaseId: string; projectId: string; rawScript: string; targetUrl?: string; browserType?: string;
+    variables?: Record<string, string>; authConfigs?: { label: string; username: string; password: string; role?: string }[];
+  }) =>
     httpClient.post<AutomationScript>('/automation/scripts/import-codegen', data).then((r) => r.data),
 
   // ─── Script CRUD ────────────────────────────────────────────────────────
@@ -47,7 +53,7 @@ export const automationService = {
     httpClient.delete(`/automation/scripts/${id}`).then((r) => r.data),
 
   // ─── Execution ──────────────────────────────────────────────────────────
-  execute: (scriptId: string, data?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean }) =>
+  execute: (scriptId: string, data?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean; variables?: Record<string, string> }) =>
     httpClient.post<ScriptExecution>(`/automation/scripts/${scriptId}/execute`, data || {}).then((r) => r.data),
 
   cancelExecution: (executionId: string) =>

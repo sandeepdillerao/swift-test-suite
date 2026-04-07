@@ -227,7 +227,9 @@ export const TestRunDialog = ({ open, onOpenChange, testRun, onSave }: TestRunDi
                     <SelectContent>
                       <SelectItem value={NONE_VALUE}>Unassigned</SelectItem>
                       {(Array.isArray(users) ? users : []).map((u: any) => (
-                        <SelectItem key={u.id} value={u.id}>{u.displayName || u.name || u.email}</SelectItem>
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.displayName || u.email}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

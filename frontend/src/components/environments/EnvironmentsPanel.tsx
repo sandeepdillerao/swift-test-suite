@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   Plus, Pencil, Trash2, Globe, KeyRound, Variable, Loader2, ServerCrash,
 } from 'lucide-react';
@@ -127,15 +127,18 @@ function EnvironmentDialog({
 }) {
   const [form, setForm] = useState<EnvironmentFormData>(() => buildFormData(environment));
 
-  // Reset form when dialog opens with new data
+  // Reset form when environment prop changes or dialog opens
+  useEffect(() => {
+    if (open) {
+      setForm(buildFormData(environment));
+    }
+  }, [open, environment]);
+
   const handleOpenChange = useCallback(
     (value: boolean) => {
-      if (value) {
-        setForm(buildFormData(environment));
-      }
       onOpenChange(value);
     },
-    [environment, onOpenChange],
+    [onOpenChange],
   );
 
   const updateField = useCallback(

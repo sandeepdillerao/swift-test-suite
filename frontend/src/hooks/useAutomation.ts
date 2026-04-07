@@ -113,7 +113,7 @@ export const useDeleteScript = () => {
 export const useExecuteScript = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ scriptId, options }: { scriptId: string; options?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean } }) =>
+    mutationFn: ({ scriptId, options }: { scriptId: string; options?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean; variables?: Record<string, string> } }) =>
       api.automation.execute(scriptId, options),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automationScripts'] });
