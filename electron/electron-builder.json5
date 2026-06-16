@@ -1,0 +1,112 @@
+{
+  // TestFlow TCM — enterprise installer configuration
+  appId: "com.testflow.tcm",
+  productName: "TestFlow TCM",
+  copyright: "Copyright © 2025 TestFlow",
+  asar: true,
+
+  directories: {
+    buildResources: "resources",
+    output: "dist",
+  },
+
+  files: [
+    "out/**/*",
+    "!out/renderer/**/*.{map,txt}",
+  ],
+
+  // Include the bundled NestJS backend for local-mode operation
+  extraResources: [
+    {
+      from: "resources/backend",
+      to: "backend",
+      filter: ["**/*"],
+    },
+  ],
+
+  // ─── Windows ───────────────────────────────────────────────────────────────
+  win: {
+    target: [
+      { target: "nsis", arch: ["x64", "ia32"] },
+      { target: "portable", arch: ["x64"] },
+    ],
+    icon: "resources/icon.ico",
+    publisherName: "TestFlow",
+    verifyUpdateCodeSignature: false,
+    requestedExecutionLevel: "asInvoker",
+  },
+
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    allowElevation: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    shortcutName: "TestFlow TCM",
+    installerIcon: "resources/icon.ico",
+    uninstallerIcon: "resources/icon.ico",
+    runAfterFinish: true,
+    deleteAppDataOnUninstall: false,
+  },
+
+  // ─── macOS ─────────────────────────────────────────────────────────────────
+  mac: {
+    target: [
+      { target: "dmg", arch: ["x64", "arm64"] },
+      { target: "zip", arch: ["x64", "arm64"] },
+    ],
+    icon: "resources/icon.icns",
+    category: "public.app-category.developer-tools",
+    darkModeSupport: true,
+    hardenedRuntime: true,
+    gatekeeperAssess: false,
+    entitlements: "resources/entitlements.mac.plist",
+    entitlementsInherit: "resources/entitlements.mac.plist",
+    notarize: false, // set to true + configure after obtaining Apple Developer account
+  },
+
+  dmg: {
+    icon: "resources/icon.icns",
+    iconSize: 80,
+    window: { width: 660, height: 400 },
+    contents: [
+      { x: 190, y: 200, type: "file" },
+      { x: 470, y: 200, type: "link", path: "/Applications" },
+    ],
+  },
+
+  // ─── Linux ─────────────────────────────────────────────────────────────────
+  linux: {
+    target: [
+      { target: "AppImage", arch: ["x64"] },
+      { target: "deb", arch: ["x64"] },
+      { target: "rpm", arch: ["x64"] },
+    ],
+    icon: "resources/icons",
+    category: "Development",
+    description: "Enterprise Test Case Management Platform",
+    desktop: {
+      StartupNotify: "true",
+      Categories: "Development;",
+    },
+  },
+
+  deb: {
+    depends: ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libdrm2", "libgbm1"],
+  },
+
+  // ─── Auto-Update ───────────────────────────────────────────────────────────
+  publish: {
+    provider: "github",
+    owner: "your-org",
+    repo: "testflow-tcm",
+    releaseType: "release",
+  },
+
+  // ─── Protocol handler (deep links) ─────────────────────────────────────────
+  protocols: {
+    name: "testflow",
+    schemes: ["testflow"],
+  },
+}
