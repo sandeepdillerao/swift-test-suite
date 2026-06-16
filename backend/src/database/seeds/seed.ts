@@ -1,17 +1,17 @@
 import * as bcrypt from 'bcryptjs';
-import { AppDataSource } from '../data-source';
+import { RefreshToken } from '../../modules/auth/entities/refresh-token.entity';
 import { Organization } from '../../modules/organizations/entities/organization.entity';
-import { User, UserRole } from '../../modules/users/entities/user.entity';
 import { Project } from '../../modules/projects/entities/project.entity';
-import { TestSuite } from '../../modules/test-suites/entities/test-suite.entity';
-import { TestCase } from '../../modules/test-cases/entities/test-case.entity';
-import { Priority, TestStatus, TestType } from '../../modules/test-cases/entities/test-case.enums';
 import { Release } from '../../modules/releases/entities/release.entity';
 import { ReleaseStatus } from '../../modules/releases/entities/release.enums';
-import { TestRun } from '../../modules/test-runs/entities/test-run.entity';
+import { TestCase } from '../../modules/test-cases/entities/test-case.entity';
+import { Priority, TestStatus, TestType } from '../../modules/test-cases/entities/test-case.enums';
 import { TestRunCase } from '../../modules/test-runs/entities/test-run-case.entity';
+import { TestRun } from '../../modules/test-runs/entities/test-run.entity';
 import { TestRunStatus } from '../../modules/test-runs/entities/test-run.enums';
-import { RefreshToken } from '../../modules/auth/entities/refresh-token.entity';
+import { TestSuite } from '../../modules/test-suites/entities/test-suite.entity';
+import { User, UserRole } from '../../modules/users/entities/user.entity';
+import { AppDataSource } from '../data-source';
 
 const BCRYPT_ROUNDS = 10;
 

@@ -1,0 +1,94 @@
+name: testflow-tcm
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: testflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-testflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-testflow_secret}
+      POSTGRES_DB: ${DB_NAME:-testflow_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-testflow} -d ${DB_NAME:-testflow_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [testflow_net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: testflow_redis
+    restart: unless-stopped
+    command: >
+      sh -c 'if [ -n "$${REDIS_PASSWORD}" ]; then
+               redis-server --requirepass "$${REDIS_PASSWORD}";
+             else
+               redis-server;
+             fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [testflow_net]
+
+  backend:
+    image: testflow-backend:${IMAGE_TAG:-1.0.0}
+    container_name: testflow_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PREFIX: api/v1
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-testflow}
+      DB_PASSWORD: ${DB_PASSWORD:-testflow_secret}
+      DB_NAME: ${DB_NAME:-testflow_db}
+      DB_SYNC: ${DB_SYNC:-true}
+      DB_LOGGING: "false"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+    volumes:
+      - backend_uploads:/app/uploads
+    networks: [testflow_net]
+
+  frontend:
+    image: testflow-frontend:${IMAGE_TAG:-1.0.0}
+    container_name: testflow_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-8080}:80"
+    networks: [testflow_net]
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+
+networks:
+  testflow_net:
+    driver: bridge
