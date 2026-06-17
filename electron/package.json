@@ -1,8 +1,8 @@
 {
   "name": "testflow-desktop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "TestFlow TCM — Enterprise Test Case Management Desktop App",
-  "homepage": "https://github.com/your-org/testflow-tcm",
+  "homepage": "https://github.com/sandeepdillerao/swift-test-suite",
   "private": true,
   "main": "out/main/index.js",
   "author": {
@@ -25,8 +25,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@types/pg": "^8.20.0",
     "electron-store": "^8.2.0",
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@electron-toolkit/utils": "^3.0.0",
