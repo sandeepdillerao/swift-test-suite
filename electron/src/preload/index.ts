@@ -7,6 +7,7 @@ const serverMode = ipcRenderer.invoke('server:get-mode') // async — used by re
 const electronApi = {
   // ─── Identity ─────────────────────────────────────────────────────────
   isElectron: true as const,
+  isDev: process.env.NODE_ENV === 'development',
   platform: process.platform as NodeJS.Platform,
   apiUrl,
 
@@ -128,6 +129,7 @@ export type ElectronChannel =
 
 export interface ElectronAPI {
   isElectron: true
+  isDev: boolean
   platform: NodeJS.Platform
   apiUrl: string
   getVersion(): Promise<string>

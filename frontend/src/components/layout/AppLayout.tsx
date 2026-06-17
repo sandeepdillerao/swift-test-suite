@@ -184,19 +184,24 @@ export const AppLayout = () => {
           sidebarCollapsed ? 'ml-16' : 'ml-64'
         )}
       >
-        {/* Header */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-xl px-6">
+        {/* Header — on macOS with hiddenInset the traffic lights sit in this bar */}
+        <header
+          className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-xl px-6"
+          style={window.electron?.platform === 'darwin' ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
+        >
+          {/* On macOS with drag region on the header, interactive elements must opt out */}
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleSidebar}
             className="h-9 w-9"
+            style={window.electron?.platform === 'darwin' ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
           >
             <Menu className="h-4 w-4" />
           </Button>
 
           {/* Search */}
-          <div className="flex-1 max-w-md">
+          <div className="flex-1 max-w-md" style={window.electron?.platform === 'darwin' ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -239,7 +244,7 @@ export const AppLayout = () => {
             </DropdownMenu>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto" style={window.electron?.platform === 'darwin' ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}>
             <ThemeToggle />
             
             <Button variant="ghost" size="icon" className="h-9 w-9 relative">

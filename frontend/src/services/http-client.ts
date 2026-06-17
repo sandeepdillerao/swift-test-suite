@@ -43,9 +43,25 @@ function processQueue(error: unknown, token: string | null) {
   refreshQueue = [];
 }
 
+// ─── Navigation helper ────────────────────────────────────────────────────────
+// In Electron (HashRouter), use hash navigation; in the browser use href.
+function navigateToLogin(): void {
+  if (typeof window === 'undefined') return
+  if (window.electron?.isElectron) {
+    window.location.hash = '#/login'
+  } else {
+    window.location.href = '/login'
+  }
+}
+
 // ─── Axios instance ───────────────────────────────────────────────────────────
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
+// In Electron, the preload reads the stored API URL synchronously before the renderer
+// starts, so window.electron.apiUrl is available at module load time.
+const BASE_URL =
+  (typeof window !== 'undefined' && window.electron?.apiUrl) ||
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:3000/api/v1'
 
 export const httpClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
@@ -95,7 +111,7 @@ httpClient.interceptors.response.use(
       // Skip refresh loop for the refresh endpoint itself
       if (originalRequest.url?.includes('/auth/refresh')) {
         useAuthStore.getState().logout();
-        window.location.href = '/login';
+        navigateToLogin();
         return Promise.reject(error);
       }
 
@@ -129,13 +145,17 @@ httpClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         logout();
-        window.location.href = '/login';
+        navigateToLogin();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
     }
 
+    // Network-level failure (no response at all) — server is unreachable
+    if (!error.response) {
+      return Promise.reject(new Error('Network Error — cannot reach the server. Check your API URL in Settings → Desktop App.'))
+    }
     // Surface a clean error message from RFC 7807 detail
     const detail = error.response?.data?.detail ?? error.message;
     return Promise.reject(new Error(detail));

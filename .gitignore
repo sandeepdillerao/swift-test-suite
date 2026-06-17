@@ -39,3 +39,9 @@ uploads/
 # TypeORM
 *.js.map
 dist-share
+
+# Electron build outputs
+electron/out/
+electron/dist/
+
+dist-share

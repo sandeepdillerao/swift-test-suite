@@ -38,8 +38,62 @@ interface CodegenSession {
   error: string | null;
 }
 
-/** Persistent storage root for execution artifacts */
-const ARTIFACTS_ROOT = path.resolve(process.cwd(), 'uploads', 'automation');
+/** Persistent storage root for execution artifacts.
+ *  UPLOADS_DIR is injected by the Electron main process so the app writes to a
+ *  writable user-data directory instead of process.cwd() (which is / in packaged apps). */
+const ARTIFACTS_ROOT = process.env.UPLOADS_DIR
+  ? path.join(process.env.UPLOADS_DIR, 'automation')
+  : path.resolve(process.cwd(), 'uploads', 'automation');
+
+/**
+ * Resolve the Playwright CLI binary path.
+ *
+ * Search order:
+ *  1. PLAYWRIGHT_NODE_MODULES env var — set by Electron main process to the
+ *     user-data node_modules directory (writable, where the user installs PW).
+ *  2. Relative to __dirname — works in dev/web mode (backend/dist → backend/node_modules
+ *     or workspace/node_modules).
+ *  3. 'playwright' — falls back to whatever is on PATH (global install).
+ */
+/** Returns the node_modules directory that contains @playwright/test. */
+function resolvePlaywrightNodeModules(): string {
+  if (process.env.PLAYWRIGHT_NODE_MODULES) {
+    if (fs.existsSync(path.join(process.env.PLAYWRIGHT_NODE_MODULES, '@playwright', 'test'))) {
+      return process.env.PLAYWRIGHT_NODE_MODULES;
+    }
+  }
+  const candidates = [
+    path.resolve(__dirname, '..', '..', '..', 'node_modules'),
+    path.resolve(__dirname, '..', '..', '..', '..', 'node_modules'),
+    path.resolve(__dirname, '..', '..', '..', '..', '..', 'node_modules'),
+  ];
+  for (const nm of candidates) {
+    if (fs.existsSync(path.join(nm, '@playwright', 'test'))) return nm;
+  }
+  return '';
+}
+
+function resolvePlaywrightBin(): string {
+  // 1. Electron desktop: user-data node_modules
+  if (process.env.PLAYWRIGHT_NODE_MODULES) {
+    const bin = path.join(process.env.PLAYWRIGHT_NODE_MODULES, '.bin', 'playwright');
+    if (fs.existsSync(bin)) return bin;
+  }
+
+  // 2. Dev / web-server mode: walk up from __dirname
+  const candidates = [
+    path.resolve(__dirname, '..', '..', '..', 'node_modules'),
+    path.resolve(__dirname, '..', '..', '..', '..', 'node_modules'),
+    path.resolve(__dirname, '..', '..', '..', '..', '..', 'node_modules'),
+  ];
+  for (const nm of candidates) {
+    const bin = path.join(nm, '.bin', 'playwright');
+    if (fs.existsSync(bin)) return bin;
+  }
+
+  // 3. Global / PATH fallback
+  return 'playwright';
+}
 
 @Injectable()
 export class AutomationService {
@@ -70,17 +124,7 @@ export class AutomationService {
     const sessionId = uuidv4();
     const outputFile = path.join(os.tmpdir(), `codegen-${sessionId}.ts`);
 
-    // Resolve playwright binary
-    const backendRoot = path.resolve(__dirname, '..', '..', '..');
-    let nodeModulesPath = path.join(backendRoot, 'node_modules');
-    if (!fs.existsSync(path.join(nodeModulesPath, '@playwright', 'test'))) {
-      const workspaceRoot = path.resolve(backendRoot, '..');
-      if (fs.existsSync(path.join(workspaceRoot, 'node_modules', '@playwright', 'test'))) {
-        nodeModulesPath = path.join(workspaceRoot, 'node_modules');
-      }
-    }
-    const playwrightBin = path.join(nodeModulesPath, '.bin', 'playwright');
-
+    const playwrightBin = resolvePlaywrightBin();
     const url = dto.targetUrl || 'http://localhost:3000';
     const browser = dto.browserType || BrowserType.CHROMIUM;
 
@@ -100,13 +144,21 @@ export class AutomationService {
       error: null,
     };
 
-    // Spawn playwright codegen — opens a browser on the user's machine
+    // Spawn playwright codegen — opens a browser on the user's machine.
+    // shell: false avoids splitting paths that contain spaces (e.g. inside a macOS .app bundle).
     const args = ['codegen', '--output', outputFile, '--browser', browser, url];
     this.logger.log(`Starting codegen session ${sessionId}: ${playwrightBin} ${args.join(' ')}`);
 
+    const nodeModulesPath = resolvePlaywrightNodeModules();
     const proc = spawn(playwrightBin, args, {
-      shell: true,
-      env: { ...process.env, NODE_PATH: nodeModulesPath },
+      shell: false,
+      env: {
+        ...process.env,
+        NODE_PATH: nodeModulesPath,
+        // Do NOT override PLAYWRIGHT_BROWSERS_PATH — let Playwright use its own
+        // platform default (~/.cache on Linux, ~/Library/Caches on macOS, %LOCALAPPDATA% on Windows).
+        // Only pass it if already set externally (e.g. Electron main process sets it for packaged app).
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -383,16 +435,6 @@ export class AutomationService {
         scriptContent = `// ── Environment Variables ──\n${varLines}\n\n${scriptContent}`;
       }
 
-      // Resolve node_modules
-      const backendRoot = path.resolve(__dirname, '..', '..', '..');
-      let nodeModulesPath = path.join(backendRoot, 'node_modules');
-      if (!fs.existsSync(path.join(nodeModulesPath, '@playwright', 'test'))) {
-        const workspaceRoot = path.resolve(backendRoot, '..');
-        if (fs.existsSync(path.join(workspaceRoot, 'node_modules', '@playwright', 'test'))) {
-          nodeModulesPath = path.join(workspaceRoot, 'node_modules');
-        }
-      }
-
       // Write playwright config — always record video + screenshots
       const configPath = path.join(tmpDir, 'playwright.config.ts');
       const headless = dto.headless !== false;
@@ -433,8 +475,8 @@ module.exports = defineConfig({
       fs.writeFileSync(scriptPath, cjsScriptContent, 'utf-8');
 
       // Execute playwright (track process for cancellation)
-      const playwrightBin = path.join(nodeModulesPath, '.bin', 'playwright');
-      const { stdout, stderr, exitCode } = await this.spawnPlaywright(playwrightBin, tmpDir, nodeModulesPath, execution.id);
+      const playwrightBin = resolvePlaywrightBin();
+      const { stdout, stderr, exitCode } = await this.spawnPlaywright(playwrightBin, tmpDir, execution.id);
       const duration = Date.now() - startTime;
 
       // ─── Collect & persist artifacts ──────────────────────────────────
@@ -647,13 +689,20 @@ module.exports = defineConfig({
     return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
   }
 
-  private spawnPlaywright(playwrightBin: string, cwd: string, nodeModulesPath: string, executionId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  private spawnPlaywright(playwrightBin: string, cwd: string, executionId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve) => {
+      const nodeModulesPath = resolvePlaywrightNodeModules();
       const proc = spawn(playwrightBin, ['test', '--config=playwright.config.ts'], {
         cwd,
-        shell: true,
+        shell: false,
         timeout: 120000,
-        env: { ...process.env, NODE_PATH: nodeModulesPath },
+        env: {
+          ...process.env,
+          // NODE_PATH lets the temp playwright.config.ts resolve @playwright/test
+          // even though there's no node_modules in the tmp directory
+          NODE_PATH: nodeModulesPath,
+          // Do NOT override PLAYWRIGHT_BROWSERS_PATH — let Playwright use its platform default.
+        },
       });
 
       // Track the process for cancellation

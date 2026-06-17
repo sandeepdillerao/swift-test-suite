@@ -81,7 +81,7 @@
     target: [
       { target: "AppImage", arch: ["x64"] },
       { target: "deb", arch: ["x64"] },
-      { target: "rpm", arch: ["x64"] },
+      // rpm requires rpmbuild — only build on Linux CI. Run: brew install rpm on macOS first.
     ],
     icon: "resources/icons",
     category: "Development",

@@ -2,6 +2,7 @@
   "name": "testflow-desktop",
   "version": "1.0.0",
   "description": "TestFlow TCM — Enterprise Test Case Management Desktop App",
+  "homepage": "https://github.com/your-org/testflow-tcm",
   "private": true,
   "main": "out/main/index.js",
   "author": {

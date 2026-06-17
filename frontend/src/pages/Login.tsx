@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { ServerConfigBanner } from '@/components/electron/ServerConfigDialog';
 
 const DEV_CREDENTIALS = [
   { label: 'Admin', email: 'admin@testflow.dev', password: 'Admin@1234', variant: 'destructive' as const },
@@ -27,6 +28,7 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/app';
 
@@ -44,9 +46,17 @@ export const Login = () => {
       });
       navigate(from, { replace: true });
     } catch (error) {
-      toast.error('Login failed', {
-        description: error instanceof Error ? error.message : 'Invalid email or password',
-      });
+      const msg = error instanceof Error ? error.message : 'Invalid email or password';
+      // Detect network-level failures (server not running / wrong URL)
+      const isNetworkError = msg.toLowerCase().includes('network error') ||
+        msg.toLowerCase().includes('connection refused') ||
+        msg.toLowerCase().includes('failed to fetch') ||
+        msg.toLowerCase().includes('cannot connect') ||
+        msg.toLowerCase().includes('econnrefused');
+      if (isNetworkError && window.electron) {
+        setConnectionError(true);
+      }
+      toast.error('Login failed', { description: msg });
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +80,10 @@ export const Login = () => {
           <CardDescription>Sign in to your account to continue</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Connection error banner — shown in Electron when server is unreachable */}
+          {connectionError && (
+            <ServerConfigBanner onResolved={() => setConnectionError(false)} />
+          )}
           {/* Dev quick-select */}
           <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3 space-y-2">
             <p className="text-xs text-muted-foreground font-medium">Quick login (dev seed users)</p>

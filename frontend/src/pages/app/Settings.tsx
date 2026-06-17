@@ -34,8 +34,11 @@ import { useAIConfigStore, AI_PROVIDERS, type AIProvider } from '@/stores/aiConf
 import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { Monitor } from 'lucide-react';
 
-type Tab = 'profile' | 'security' | 'notifications' | 'ai' | 'organization' | 'appearance';
+type Tab = 'profile' | 'security' | 'notifications' | 'ai' | 'organization' | 'appearance' | 'desktop';
+
+const isElectron = !!window.electron?.isElectron;
 
 const tabs: { id: Tab; label: string; icon: typeof User }[] = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -44,6 +47,7 @@ const tabs: { id: Tab; label: string; icon: typeof User }[] = [
   { id: 'ai', label: 'AI Config', icon: Bot },
   { id: 'organization', label: 'Organization', icon: Building2 },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  ...(isElectron ? [{ id: 'desktop' as const, label: 'Desktop App', icon: Monitor }] : []),
 ];
 
 export const Settings = () => {
@@ -849,7 +853,230 @@ export const Settings = () => {
             </Card>
           </>
         )}
+        {/* ── Desktop App (Electron only) ─────────────────────────────────── */}
+        {activeTab === 'desktop' && isElectron && (
+          <ElectronSettingsPanel />
+        )}
       </div>
     </div>
+  );
+};
+
+// ─── Electron-specific settings panel ────────────────────────────────────────
+
+const ElectronSettingsPanel = () => {
+  const [serverMode, setServerModeState] = useState<ServerMode>('not-configured');
+  const [remoteUrl, setRemoteUrl] = useState('');
+  const [dbHost, setDbHost] = useState('localhost');
+  const [dbPort, setDbPort] = useState('5432');
+  const [dbUsername, setDbUsername] = useState('testflow');
+  const [dbPassword, setDbPassword] = useState('');
+  const [dbName, setDbName] = useState('testflow_db');
+  const [backendPort, setBackendPort] = useState('3000');
+  const [launchAtStartup, setLaunchAtStartup] = useState(false);
+  const [minimizeToTray, setMinimizeToTray] = useState(true);
+  const [showUpdateNotifications, setShowUpdateNotifications] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [version, setVersion] = useState('');
+
+  type ServerMode = 'local' | 'remote' | 'not-configured';
+
+  useEffect(() => {
+    if (!window.electron) return;
+    window.electron.getSettings().then((s) => {
+      setServerModeState(s.serverMode as ServerMode);
+      setRemoteUrl(s.remoteApiUrl || '');
+      if (s.local) {
+        setDbHost(s.local.dbHost);
+        setDbPort(String(s.local.dbPort));
+        setDbUsername(s.local.dbUsername);
+        setDbPassword(s.local.dbPassword);
+        setDbName(s.local.dbName);
+        setBackendPort(String(s.local.backendPort));
+      }
+      setLaunchAtStartup(s.launchAtStartup);
+      setMinimizeToTray(s.minimizeToTray);
+      setShowUpdateNotifications(s.showUpdateNotifications);
+    });
+    window.electron.getVersion().then(setVersion);
+  }, []);
+
+  const handleSave = async () => {
+    if (!window.electron) return;
+    setSaving(true);
+    try {
+      if (serverMode === 'remote') {
+        await window.electron.saveRemoteServer(remoteUrl);
+      } else if (serverMode === 'local') {
+        await window.electron.saveLocalServer({
+          dbHost, dbPort: Number(dbPort), dbUsername, dbPassword, dbName,
+          backendPort: Number(backendPort),
+        });
+      }
+      await window.electron.setSettings({ launchAtStartup, minimizeToTray, showUpdateNotifications });
+      toast.success('Settings saved. Restart the app to apply changes.');
+    } catch {
+      toast.error('Failed to save desktop settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div>
+        <h2 className="text-xl font-semibold">Desktop App</h2>
+        <p className="text-sm text-muted-foreground">
+          Configure your TestFlow desktop application {version && `(v${version})`}
+        </p>
+      </div>
+
+      {/* Mode selector */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Server Mode</CardTitle>
+          <CardDescription>Choose how the desktop app connects to the TestFlow backend</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { value: 'local', label: 'Run locally', desc: 'Backend starts automatically on this machine' },
+              { value: 'remote', label: 'Cloud / Remote', desc: 'Connect to a hosted TestFlow server' },
+            ] as const).map(({ value, label, desc }) => (
+              <button
+                key={value}
+                onClick={() => setServerModeState(value)}
+                className={cn(
+                  'rounded-lg border-2 p-3 text-left transition-all',
+                  serverMode === value
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/40 hover:bg-muted'
+                )}
+              >
+                <p className={cn('text-sm font-medium', serverMode === value ? 'text-primary' : '')}>{label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Remote config */}
+      {serverMode === 'remote' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Remote Server</CardTitle>
+            <CardDescription>URL of your hosted TestFlow API</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Label htmlFor="remote-url">API URL</Label>
+            <Input
+              id="remote-url"
+              value={remoteUrl}
+              onChange={(e) => setRemoteUrl(e.target.value)}
+              placeholder="https://testflow.yourcompany.com/api/v1"
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">Restart the app after changing this.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Local config */}
+      {serverMode === 'local' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Local Database</CardTitle>
+            <CardDescription>PostgreSQL connection for the local backend</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 space-y-1.5">
+                <Label className="text-xs">Host</Label>
+                <Input value={dbHost} onChange={(e) => setDbHost(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">DB Port</Label>
+                <Input value={dbPort} onChange={(e) => setDbPort(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Backend Port</Label>
+                <Input value={backendPort} onChange={(e) => setBackendPort(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Username</Label>
+                <Input value={dbUsername} onChange={(e) => setDbUsername(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Password</Label>
+                <Input type="password" value={dbPassword} onChange={(e) => setDbPassword(e.target.value)} className="h-8 text-sm" />
+              </div>
+              <div className="col-span-2 space-y-1.5">
+                <Label className="text-xs">Database name</Label>
+                <Input value={dbName} onChange={(e) => setDbName(e.target.value)} className="h-8 text-sm" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Behaviour</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Launch at startup</p>
+              <p className="text-xs text-muted-foreground">Open TestFlow when you log in to your computer</p>
+            </div>
+            <Switch checked={launchAtStartup} onCheckedChange={setLaunchAtStartup} />
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Minimize to tray</p>
+              <p className="text-xs text-muted-foreground">Keep TestFlow running in the system tray when you close the window</p>
+            </div>
+            <Switch checked={minimizeToTray} onCheckedChange={setMinimizeToTray} />
+          </div>
+          <Separator />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Update notifications</p>
+              <p className="text-xs text-muted-foreground">Show a banner when a new version is available</p>
+            </div>
+            <Switch checked={showUpdateNotifications} onCheckedChange={setShowUpdateNotifications} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Updates</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => window.electron?.checkForUpdates()}
+            >
+              Check for updates
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => window.electron?.openConfigDir()}
+            >
+              Open config folder
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Button onClick={handleSave} disabled={saving} className="gap-2 w-fit">
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Save Desktop Settings
+      </Button>
+    </>
   );
 };

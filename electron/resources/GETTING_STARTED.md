@@ -92,6 +92,23 @@ sudo dnf install "TestFlow TCM-1.0.0.rpm"
 
 ---
 
+## Playwright Automation (one-time setup)
+
+Before running Playwright test scripts, download the browser binaries once:
+
+```bash
+# Install Chromium (smallest, covers most tests)
+npx playwright install chromium
+
+# Or install all browsers (Chromium + Firefox + WebKit)
+npx playwright install
+```
+
+> **Node.js required** — download from https://nodejs.org (LTS version).  
+> Browsers are cached in `~/.cache/ms-playwright/` (~200MB for Chromium).
+
+---
+
 ## First Launch
 
 ### Connecting to a hosted TestFlow server

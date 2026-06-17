@@ -46,6 +46,7 @@ type ElectronChannel =
 
 interface ElectronAPI {
   isElectron: true
+  isDev: boolean
   platform: 'win32' | 'darwin' | 'linux'
   apiUrl: string
   getVersion(): Promise<string>

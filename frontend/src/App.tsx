@@ -2,10 +2,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect } from "react";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useUIStore } from "@/stores/uiStore";
 import { useAuthStore } from "@/stores/authStore";
+import { ElectronTitleBar } from "@/components/electron/ElectronTitleBar";
+import { UpdateNotification } from "@/components/electron/UpdateNotification";
+import { SetupWizard } from "@/components/electron/SetupWizard";
+import { BackendStartup } from "@/components/electron/BackendStartup";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Login } from "@/pages/Login";
@@ -37,48 +41,122 @@ const ThemeInitializer = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// Redirect already-authenticated users away from /login
 const PublicOnlyRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, accessToken } = useAuthStore();
   if (isAuthenticated && accessToken) return <Navigate to="/app" replace />;
   return <>{children}</>;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <ThemeInitializer>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Navigate to="/app" replace />} />
-            <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-            <Route element={<ProtectedRoute />}>
-              <Route path="/app" element={<AppLayout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="projects" element={<Projects />} />
-                <Route path="projects/:id" element={<ProjectDetail />} />
-                <Route path="test-cases" element={<TestCases />} />
-                <Route path="test-cases/:id" element={<TestCaseDetail />} />
-                <Route path="test-suites" element={<TestSuites />} />
-                <Route path="test-suites/:id" element={<TestSuiteDetail />} />
-                <Route path="test-runs" element={<TestRuns />} />
-                <Route path="test-runs/:id" element={<TestRunDetail />} />
-                <Route path="releases" element={<Releases />} />
-                <Route path="integrations" element={<Integrations />} />
-                <Route path="users" element={<UserManagement />} />
-                <Route path="roles" element={<RolesPermissions />} />
-                <Route path="ai-review" element={<AiReviewPage />} />
-                <Route path="settings" element={<Settings />} />
-              </Route>
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </ThemeInitializer>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+const ElectronNavigationHandler = (): null => {
+  const navigate = useNavigate();
+  const { toggleSidebar } = useUIStore();
+  useEffect(() => {
+    if (!window.electron) return;
+    const unsubs = [
+      window.electron.on('navigate', (path) => navigate(path as string)),
+      window.electron.on('menu:toggle-sidebar', () => toggleSidebar()),
+      window.electron.on('menu:toggle-theme', () => useUIStore.getState().toggleTheme()),
+    ];
+    return () => unsubs.forEach((fn) => fn());
+  }, [navigate, toggleSidebar]);
+  return null;
+};
+
+const AppRouter = window.electron?.isElectron ? HashRouter : BrowserRouter;
+
+// ─── Electron startup gate ────────────────────────────────────────────────────
+// Shows the setup wizard on first launch, then the backend startup screen for
+// local mode, before revealing the main application.
+
+type ElectronGate = 'checking' | 'setup' | 'backend-starting' | 'ready'
+
+const App = () => {
+  const [gate, setGate] = useState<ElectronGate>(() =>
+    window.electron ? 'checking' : 'ready'
+  )
+
+  useEffect(() => {
+    if (!window.electron) return
+    const { isDev } = window.electron
+    window.electron.getServerMode().then((mode) => {
+      if (mode === 'not-configured') {
+        // In dev mode skip the setup wizard — backend & DB are already running
+        setGate(isDev ? 'ready' : 'setup')
+      } else if (mode === 'local') {
+        // In dev mode backend is started by concurrently — skip startup overlay
+        setGate(isDev ? 'ready' : 'backend-starting')
+      } else {
+        setGate('ready')
+      }
+    })
+  }, [])
+
+  // After setup wizard completes — if local mode was chosen, show startup screen
+  const handleSetupComplete = async () => {
+    const mode = await window.electron!.getServerMode()
+    if (mode === 'local') {
+      setGate('backend-starting')
+      // Tell main process to start the backend now
+      window.electron!.startBackend()
+    } else {
+      setGate('ready')
+      window.location.reload() // reload so http-client picks up new apiUrl
+    }
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <ThemeInitializer>
+          <Toaster />
+          <Sonner />
+
+          {/* First-launch setup wizard */}
+          {gate === 'setup' && <SetupWizard onComplete={handleSetupComplete} />}
+
+          {/* Backend startup overlay (local mode only) */}
+          {gate === 'backend-starting' && (
+            <BackendStartup onReady={() => setGate('ready')} />
+          )}
+
+          {/* Main app (shown once gate is ready) */}
+          {(gate === 'ready' || gate === 'checking') && (
+            <>
+              <UpdateNotification />
+              <ElectronTitleBar />
+              <AppRouter>
+                <ElectronNavigationHandler />
+                <Routes>
+                  <Route path="/" element={<Navigate to="/app" replace />} />
+                  <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+                  <Route element={<ProtectedRoute />}>
+                    <Route path="/app" element={<AppLayout />}>
+                      <Route index element={<Dashboard />} />
+                      <Route path="projects" element={<Projects />} />
+                      <Route path="projects/:id" element={<ProjectDetail />} />
+                      <Route path="test-cases" element={<TestCases />} />
+                      <Route path="test-cases/:id" element={<TestCaseDetail />} />
+                      <Route path="test-suites" element={<TestSuites />} />
+                      <Route path="test-suites/:id" element={<TestSuiteDetail />} />
+                      <Route path="test-runs" element={<TestRuns />} />
+                      <Route path="test-runs/:id" element={<TestRunDetail />} />
+                      <Route path="releases" element={<Releases />} />
+                      <Route path="integrations" element={<Integrations />} />
+                      <Route path="users" element={<UserManagement />} />
+                      <Route path="roles" element={<RolesPermissions />} />
+                      <Route path="ai-review" element={<AiReviewPage />} />
+                      <Route path="settings" element={<Settings />} />
+                    </Route>
+                  </Route>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </AppRouter>
+            </>
+          )}
+        </ThemeInitializer>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
