@@ -1,6 +1,6 @@
 {
   "name": "testflow-desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "TestFlow TCM — Enterprise Test Case Management Desktop App",
   "homepage": "https://github.com/sandeepdillerao/swift-test-suite",
   "private": true,
@@ -36,6 +36,7 @@
     "@vitejs/plugin-react-swc": "^3.11.0",
     "app-builder-bin": "^5.0.0-alpha.10",
     "autoprefixer": "^10.4.21",
+    "dotenv": "^17.4.2",
     "electron": "32.3.3",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
