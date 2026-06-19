@@ -156,7 +156,7 @@ export function createAppMenu(): void {
         },
         {
           label: 'Report an Issue',
-          click: () => shell.openExternal('https://github.com/your-org/testflow-tcm/issues'),
+          click: () => shell.openExternal('https://github.com/sandeepdillerao/swift-test-suite/issues'),
         },
         { type: 'separator' },
         {

@@ -3,7 +3,7 @@ import { resolve } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc-handlers'
 import { createTray, destroyTray } from './tray'
-import { setupUpdater } from './updater'
+import { registerUpdaterHandlers, setupUpdater } from './updater'
 import { createAppMenu } from './app-menu'
 import { createWindow, getMainWindow } from './window-manager'
 import { startBackend, stopBackend } from './backend-manager'
@@ -39,11 +39,12 @@ if (!gotTheLock) {
     }
 
     setupIpcHandlers()
+    registerUpdaterHandlers()  // always — so renderer can invoke updater:check in dev too
     createWindow()
     createTray()
     createAppMenu()
 
-    if (!is.dev) setupUpdater()
+    if (!is.dev) setupUpdater()  // actual auto-updater only in packaged builds
 
     // Start local backend if configured for local mode
     const mode = store.get('serverMode')

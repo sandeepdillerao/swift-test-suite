@@ -18,6 +18,8 @@
     "dist:mac": "npm run dist:mac --prefix electron",
     "dist:linux": "npm run dist:linux --prefix electron",
     "dist:all": "npm run dist:all --prefix electron",
+    "release": "cd electron && bash scripts/release.sh",
+    "release:dry": "cd electron && bash scripts/release.sh --dry-run",
     "test:backend": "npm run test --workspace=backend",
     "test:e2e": "npm run test:e2e --workspace=backend"
   },

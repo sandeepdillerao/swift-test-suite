@@ -2,6 +2,11 @@ import { app, ipcMain, dialog, shell, Notification, safeStorage, nativeTheme } f
 import { store, getEffectiveApiUrl, type ServerMode } from './store'
 import { getMainWindow } from './window-manager'
 import { startBackend, stopBackend, restartBackend, isBackendRunning } from './backend-manager'
+import net from 'net'
+import os from 'os'
+import path from 'path'
+import fs from 'fs'
+import { Client as PgClient } from 'pg'
 
 export function setupIpcHandlers(): void {
   // ─── App version / name ──────────────────────────────────────────────────
@@ -188,4 +193,62 @@ export function setupIpcHandlers(): void {
   nativeTheme.on('updated', () => {
     getMainWindow()?.webContents.send('theme:system-changed', nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
   })
+
+  // ─── Setup wizard checks ─────────────────────────────────────────────────
+
+  // 1. TCP check — is something listening on host:port?
+  ipcMain.handle('setup:check-pg-port', (_event, host: string, port: number) => {
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      const socket = new net.Socket()
+      const timeout = 3000
+      socket.setTimeout(timeout)
+      socket.connect(port, host, () => {
+        socket.destroy()
+        resolve({ ok: true })
+      })
+      socket.on('error', (err) => resolve({ ok: false, error: err.message }))
+      socket.on('timeout', () => { socket.destroy(); resolve({ ok: false, error: 'Connection timed out' }) })
+    })
+  })
+
+  // 2. Full credential check — can we authenticate to the database?
+  ipcMain.handle('setup:check-pg-credentials', async (_event, config: {
+    host: string; port: number; user: string; password: string; database: string
+  }) => {
+    const client = new PgClient({ ...config, connectionTimeoutMillis: 5000 })
+    try {
+      await client.connect()
+      await client.end()
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  // 3. Check if Playwright Chromium binary is installed on this machine
+  ipcMain.handle('setup:check-playwright', () => {
+    const home = os.homedir()
+    const cachePaths =
+      process.platform === 'darwin'
+        ? [path.join(home, 'Library', 'Caches', 'ms-playwright')]
+        : process.platform === 'win32'
+          ? [path.join(process.env['LOCALAPPDATA'] || home, 'ms-playwright')]
+          : [path.join(home, '.cache', 'ms-playwright')]
+
+    for (const base of cachePaths) {
+      if (!fs.existsSync(base)) continue
+      const dirs = fs.readdirSync(base)
+      const hasChromium = dirs.some(
+        (d) => d.startsWith('chromium-') || d.startsWith('chromium_headless_shell-'),
+      )
+      if (hasChromium) return { ok: true, path: base }
+    }
+    return { ok: false, path: cachePaths[0] }
+  })
+
+  // 4. Return install instructions per platform
+  ipcMain.handle('setup:get-platform-info', () => ({
+    platform: process.platform,
+    arch: process.arch,
+  }))
 }

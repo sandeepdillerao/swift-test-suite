@@ -97,11 +97,18 @@
   },
 
   // ─── Auto-Update ───────────────────────────────────────────────────────────
+  // GitHub Releases — set GH_TOKEN env var before running dist:*
+  // RELEASE_GH_TOKEN (read-only, Contents+Metadata) is injected by the release
+  // script via --config.publish.token so it ends up in app-update.yml inside the app.
   publish: {
     provider: "github",
-    owner: "your-org",
-    repo: "testflow-tcm",
+    owner: "sandeepdillerao",
+    repo: "swift-test-suite",
     releaseType: "release",
+    // private: true tells electron-updater to use the authenticated GitHub API
+    // (api.github.com/repos/.../releases) instead of the direct download URL
+    // (github.com/.../releases/latest/download) which returns 404 for private repos.
+    private: true,
   },
 
   // ─── Protocol handler (deep links) ─────────────────────────────────────────

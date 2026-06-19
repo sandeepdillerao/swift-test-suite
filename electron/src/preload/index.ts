@@ -66,6 +66,16 @@ const electronApi = {
   downloadUpdate: (): Promise<void> => ipcRenderer.invoke('updater:download'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('updater:install'),
 
+  // ─── Setup wizard checks ──────────────────────────────────────────────────
+  checkPgPort: (host: string, port: number): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('setup:check-pg-port', host, port),
+  checkPgCredentials: (cfg: { host: string; port: number; user: string; password: string; database: string }): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('setup:check-pg-credentials', cfg),
+  checkPlaywright: (): Promise<{ ok: boolean; path: string }> =>
+    ipcRenderer.invoke('setup:check-playwright'),
+  getPlatformInfo: (): Promise<{ platform: string; arch: string }> =>
+    ipcRenderer.invoke('setup:get-platform-info'),
+
   // ─── Theme ────────────────────────────────────────────────────────────
   getSystemTheme: (): Promise<'light' | 'dark'> => ipcRenderer.invoke('theme:get-system'),
 
@@ -161,6 +171,10 @@ export interface ElectronAPI {
   checkForUpdates(): Promise<unknown>
   downloadUpdate(): Promise<void>
   installUpdate(): Promise<void>
+  checkPgPort(host: string, port: number): Promise<{ ok: boolean; error?: string }>
+  checkPgCredentials(cfg: { host: string; port: number; user: string; password: string; database: string }): Promise<{ ok: boolean; error?: string }>
+  checkPlaywright(): Promise<{ ok: boolean; path: string }>
+  getPlatformInfo(): Promise<{ platform: string; arch: string }>
   getSystemTheme(): Promise<'light' | 'dark'>
   on(channel: ElectronChannel, listener: (data?: unknown) => void): () => void
 }

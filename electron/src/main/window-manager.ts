@@ -6,6 +6,8 @@ import { store } from './store'
 let mainWindow: BrowserWindow | null = null
 
 export function getMainWindow(): BrowserWindow | null {
+  // Auto-null if the window has been destroyed so callers don't get a stale ref
+  if (mainWindow?.isDestroyed()) mainWindow = null
   return mainWindow
 }
 
@@ -74,6 +76,21 @@ export function createWindow(): BrowserWindow {
   mainWindow.on('moved', saveBounds)
   mainWindow.on('maximize', saveBounds)
   mainWindow.on('unmaximize', saveBounds)
+
+  // Intercept the native OS close button — minimize to tray instead of destroying
+  // (only on Windows/Linux; macOS already keeps apps alive in the Dock)
+  mainWindow.on('close', (event) => {
+    if (store.get('minimizeToTray') && process.platform !== 'darwin') {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
+  // Clear the reference once the window is fully destroyed so getMainWindow()
+  // never returns a stale destroyed object (which causes "Object has been destroyed")
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 
   // Route external links to the OS default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

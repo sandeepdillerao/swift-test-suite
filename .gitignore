@@ -44,4 +44,8 @@ dist-share
 electron/out/
 electron/dist/
 
+# Electron secrets — never commit
+electron/.env
+electron/.env.local
+
 dist-share

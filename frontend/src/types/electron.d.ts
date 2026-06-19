@@ -78,6 +78,10 @@ interface ElectronAPI {
   checkForUpdates(): Promise<unknown>
   downloadUpdate(): Promise<void>
   installUpdate(): Promise<void>
+  checkPgPort(host: string, port: number): Promise<{ ok: boolean; error?: string }>
+  checkPgCredentials(cfg: { host: string; port: number; user: string; password: string; database: string }): Promise<{ ok: boolean; error?: string }>
+  checkPlaywright(): Promise<{ ok: boolean; path: string }>
+  getPlatformInfo(): Promise<{ platform: string; arch: string }>
   getSystemTheme(): Promise<'light' | 'dark'>
   on(channel: ElectronChannel, listener: (data?: unknown) => void): () => void
 }

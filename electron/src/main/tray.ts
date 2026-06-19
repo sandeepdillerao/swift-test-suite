@@ -1,6 +1,6 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import { join } from 'path'
-import { getMainWindow } from './window-manager'
+import { getMainWindow, createWindow } from './window-manager'
 
 let tray: Tray | null = null
 
@@ -26,11 +26,16 @@ export function createTray(): void {
 
   tray.on('click', () => {
     const win = getMainWindow()
-    if (!win) return
+    if (!win) {
+      // Window was fully closed — recreate it
+      createWindow()
+      return
+    }
     if (win.isVisible()) {
       win.focus()
     } else {
       win.show()
+      win.focus()
     }
   })
 }
@@ -49,7 +54,9 @@ export function updateTrayMenu(): void {
       label: 'Open TestFlow',
       click: () => {
         const win = getMainWindow()
-        if (win) {
+        if (!win) {
+          createWindow()
+        } else {
           win.show()
           win.focus()
         }
