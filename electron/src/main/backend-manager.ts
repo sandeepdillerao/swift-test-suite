@@ -67,7 +67,10 @@ function buildBackendEnv(): NodeJS.ProcessEnv {
     DB_USERNAME: local.dbUsername,
     DB_PASSWORD: local.dbPassword,
     DB_NAME: local.dbName,
-    DB_SYNC: 'false',
+    // DB_SYNC=true lets TypeORM auto-create/update tables on first boot.
+    // Safe for new installations; for existing data it only adds missing columns/tables
+    // (never drops). Users connecting to a remote managed server should use remote mode.
+    DB_SYNC: 'true',
     DB_LOGGING: 'false',
     JWT_SECRET: jwtSecret,
     JWT_ACCESS_EXPIRY: '15m',

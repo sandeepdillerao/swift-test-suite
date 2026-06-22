@@ -26,6 +26,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { AutomationModule } from './modules/automation/automation.module';
 import { AiAuditModule } from './common/modules/ai-audit';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { SetupModule } from './modules/setup/setup.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
     AutomationModule,
     AiAuditModule,
     RbacModule,
+    SetupModule,
   ],
   providers: [
     {

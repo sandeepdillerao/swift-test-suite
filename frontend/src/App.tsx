@@ -10,6 +10,7 @@ import { ElectronTitleBar } from "@/components/electron/ElectronTitleBar";
 import { UpdateNotification } from "@/components/electron/UpdateNotification";
 import { SetupWizard } from "@/components/electron/SetupWizard";
 import { BackendStartup } from "@/components/electron/BackendStartup";
+import { FirstRunSetup } from "@/components/electron/FirstRunSetup";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Login } from "@/pages/Login";
@@ -68,7 +69,7 @@ const AppRouter = window.electron?.isElectron ? HashRouter : BrowserRouter;
 // Shows the setup wizard on first launch, then the backend startup screen for
 // local mode, before revealing the main application.
 
-type ElectronGate = 'checking' | 'setup' | 'backend-starting' | 'ready'
+type ElectronGate = 'checking' | 'setup' | 'backend-starting' | 'first-run-setup' | 'ready'
 
 const App = () => {
   const [gate, setGate] = useState<ElectronGate>(() =>
@@ -116,7 +117,29 @@ const App = () => {
 
           {/* Backend startup overlay (local mode only) */}
           {gate === 'backend-starting' && (
-            <BackendStartup onReady={() => setGate('ready')} />
+            <BackendStartup onReady={async () => {
+              // After backend is up, check via IPC (pg direct query) if the DB
+              // is empty. This is more reliable than an HTTP fetch which can fail
+              // due to CORS, timing, or missing endpoint in older bundles.
+              try {
+                if (window.electron?.needsInit) {
+                  const { requiresSetup } = await window.electron.needsInit()
+                  setGate(requiresSetup ? 'first-run-setup' : 'ready')
+                } else {
+                  setGate('ready')
+                }
+              } catch {
+                setGate('ready')
+              }
+            }} />
+          )}
+
+          {/* First-run: create admin account + optional demo data */}
+          {gate === 'first-run-setup' && (
+            <FirstRunSetup
+              apiBase={window.electron?.apiUrl ?? 'http://localhost:3000/api/v1'}
+              onComplete={() => setGate('ready')}
+            />
           )}
 
           {/* Main app (shown once gate is ready) */}

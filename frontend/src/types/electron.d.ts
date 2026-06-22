@@ -78,6 +78,7 @@ interface ElectronAPI {
   checkForUpdates(): Promise<unknown>
   downloadUpdate(): Promise<void>
   installUpdate(): Promise<void>
+  needsInit(): Promise<{ requiresSetup: boolean }>
   checkPgPort(host: string, port: number): Promise<{ ok: boolean; error?: string }>
   checkPgCredentials(cfg: { host: string; port: number; user: string; password: string; database: string }): Promise<{ ok: boolean; error?: string }>
   checkPlaywright(): Promise<{ ok: boolean; path: string }>

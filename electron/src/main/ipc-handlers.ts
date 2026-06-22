@@ -251,4 +251,29 @@ export function setupIpcHandlers(): void {
     platform: process.platform,
     arch: process.arch,
   }))
+
+  // 5. Check if the DB is empty (no users) — used to decide whether to show
+  //    the first-run setup screen. Uses pg directly so it works even before
+  //    the NestJS backend processes its first request.
+  ipcMain.handle('setup:needs-init', async () => {
+    const local = store.get('local')
+    const client = new PgClient({
+      host: local.dbHost,
+      port: local.dbPort ?? 5432,
+      user: local.dbUsername,
+      password: local.dbPassword,
+      database: local.dbName,
+      connectionTimeoutMillis: 5000,
+    })
+    try {
+      await client.connect()
+      const result = await client.query('SELECT COUNT(*) AS cnt FROM users')
+      await client.end()
+      return { requiresSetup: parseInt(result.rows[0].cnt, 10) === 0 }
+    } catch {
+      // Table doesn't exist yet or connection failed — assume setup needed
+      try { await client.end() } catch { /* ignore */ }
+      return { requiresSetup: true }
+    }
+  })
 }

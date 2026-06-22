@@ -67,6 +67,8 @@ const electronApi = {
   installUpdate: (): Promise<void> => ipcRenderer.invoke('updater:install'),
 
   // ─── Setup wizard checks ──────────────────────────────────────────────────
+  needsInit: (): Promise<{ requiresSetup: boolean }> =>
+    ipcRenderer.invoke('setup:needs-init'),
   checkPgPort: (host: string, port: number): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('setup:check-pg-port', host, port),
   checkPgCredentials: (cfg: { host: string; port: number; user: string; password: string; database: string }): Promise<{ ok: boolean; error?: string }> =>
@@ -171,6 +173,7 @@ export interface ElectronAPI {
   checkForUpdates(): Promise<unknown>
   downloadUpdate(): Promise<void>
   installUpdate(): Promise<void>
+  needsInit(): Promise<{ requiresSetup: boolean }>
   checkPgPort(host: string, port: number): Promise<{ ok: boolean; error?: string }>
   checkPgCredentials(cfg: { host: string; port: number; user: string; password: string; database: string }): Promise<{ ok: boolean; error?: string }>
   checkPlaywright(): Promise<{ ok: boolean; path: string }>
