@@ -18,6 +18,7 @@ import { User, UserRole } from '@/modules/users/entities/user.entity';
 import { UsersService } from '@/modules/users/users.service';
 import { RbacService } from '@/modules/rbac/rbac.service';
 import { RegisterDto } from './dto/register.dto';
+import { InitSystemDto } from './dto/init-system.dto';
 import { RefreshToken } from './entities/refresh-token.entity';
 
 @Injectable()
@@ -242,6 +243,48 @@ export class AuthService {
       passwordResetToken: null,
       passwordResetExpiresAt: null,
     });
+  }
+
+  async getSetupStatus(): Promise<{ isInitialized: boolean }> {
+    const count = await this.userRepository.count();
+    return { isInitialized: count > 0 };
+  }
+
+  async initializeSystem(dto: InitSystemDto, userAgent?: string, ipAddress?: string) {
+    const count = await this.userRepository.count();
+    if (count > 0) {
+      throw new ConflictException('System is already initialized');
+    }
+
+    const bcryptRounds = this.configService.get<number>('app.bcryptRounds', 12);
+    const passwordHash = await bcrypt.hash(dto.password, bcryptRounds);
+
+    const slug = slugify(dto.organizationName);
+    let organization = this.orgRepository.create({ name: dto.organizationName, slug });
+    organization = await this.orgRepository.save(organization);
+
+    await this.rbacService.seedDefaultRolesForOrg(organization.id);
+
+    const rbacRole = await this.rbacService.findRoleBySlug(organization.id, UserRole.ADMIN);
+
+    const user = this.userRepository.create({
+      email: dto.email,
+      passwordHash,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      organizationId: organization.id,
+      role: UserRole.ADMIN,
+      roleId: rbacRole?.id ?? null,
+      isActive: true,
+      isEmailVerified: true,
+    });
+
+    const savedUser = await this.userRepository.save(user);
+    this.logger.log(`System initialized by first admin: ${dto.email}`);
+
+    const tokens = await this.generateTokenPair(savedUser, userAgent, ipAddress);
+    const fullUser = await this.usersService.findById(savedUser.id);
+    return { ...tokens, user: fullUser };
   }
 
   async verifyEmail(token: string) {

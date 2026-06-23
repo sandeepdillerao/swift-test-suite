@@ -69,39 +69,65 @@ const AppRouter = window.electron?.isElectron ? HashRouter : BrowserRouter;
 // Shows the setup wizard on first launch, then the backend startup screen for
 // local mode, before revealing the main application.
 
-type ElectronGate = 'checking' | 'setup' | 'backend-starting' | 'first-run-setup' | 'ready'
+type ElectronGate = 'checking' | 'setup' | 'backend-starting' | 'first-run' | 'ready'
 
 const App = () => {
   const [gate, setGate] = useState<ElectronGate>(() =>
     window.electron ? 'checking' : 'ready'
   )
 
+  // Check if DB has any users yet. If not, show first-run admin creation screen.
+  const checkFirstRun = async () => {
+    try {
+      const apiUrl = window.electron?.apiUrl || (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000/api/v1'
+      const res = await fetch(`${apiUrl}/auth/setup-status`, { signal: AbortSignal.timeout(5000) })
+      if (res.ok) {
+        const json = await res.json()
+        const data = json.data ?? json
+        if (!data.isInitialized) {
+          setGate('first-run')
+          return
+        }
+      }
+    } catch { /* backend unreachable — fall through to app */ }
+    setGate('ready')
+  }
+
   useEffect(() => {
     if (!window.electron) return
     const { isDev } = window.electron
     window.electron.getServerMode().then((mode) => {
       if (mode === 'not-configured') {
-        // In dev mode skip the setup wizard — backend & DB are already running
-        setGate(isDev ? 'ready' : 'setup')
+        setGate('setup')
       } else if (mode === 'local') {
-        // In dev mode backend is started by concurrently — skip startup overlay
-        setGate(isDev ? 'ready' : 'backend-starting')
+        if (isDev) {
+          // In dev, backend is already running — skip startup overlay, but still check first-run
+          checkFirstRun()
+        } else {
+          setGate('backend-starting')
+        }
       } else {
         setGate('ready')
       }
     })
   }, [])
 
-  // After setup wizard completes — if local mode was chosen, show startup screen
+  // After setup wizard completes
   const handleSetupComplete = async () => {
+    const { isDev } = window.electron!
     const mode = await window.electron!.getServerMode()
     if (mode === 'local') {
-      setGate('backend-starting')
-      // Tell main process to start the backend now
-      window.electron!.startBackend()
+      if (isDev) {
+        // In dev, backend is already running via concurrently — skip startup overlay
+        await checkFirstRun()
+      } else {
+        setGate('backend-starting')
+        window.electron!.startBackend()
+      }
     } else {
+      // Remote mode: reload so http-client picks up the new apiUrl, then check first run
       setGate('ready')
-      window.location.reload() // reload so http-client picks up new apiUrl
+      window.location.reload()
     }
   }
 
@@ -117,29 +143,12 @@ const App = () => {
 
           {/* Backend startup overlay (local mode only) */}
           {gate === 'backend-starting' && (
-            <BackendStartup onReady={async () => {
-              // After backend is up, check via IPC (pg direct query) if the DB
-              // is empty. This is more reliable than an HTTP fetch which can fail
-              // due to CORS, timing, or missing endpoint in older bundles.
-              try {
-                if (window.electron?.needsInit) {
-                  const { requiresSetup } = await window.electron.needsInit()
-                  setGate(requiresSetup ? 'first-run-setup' : 'ready')
-                } else {
-                  setGate('ready')
-                }
-              } catch {
-                setGate('ready')
-              }
-            }} />
+            <BackendStartup onReady={checkFirstRun} />
           )}
 
-          {/* First-run: create admin account + optional demo data */}
-          {gate === 'first-run-setup' && (
-            <FirstRunSetup
-              apiBase={window.electron?.apiUrl ?? 'http://localhost:3000/api/v1'}
-              onComplete={() => setGate('ready')}
-            />
+          {/* First-run: no users in DB yet — create the first admin */}
+          {gate === 'first-run' && (
+            <FirstRunSetup onComplete={() => setGate('ready')} />
           )}
 
           {/* Main app (shown once gate is ready) */}

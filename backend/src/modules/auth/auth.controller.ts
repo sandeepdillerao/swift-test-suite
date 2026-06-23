@@ -25,6 +25,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { InitSystemDto } from './dto/init-system.dto';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 
 @ApiTags('Auth')
@@ -108,6 +109,23 @@ export class AuthController {
   async verifyEmail(@Body() body: { token: string }) {
     await this.authService.verifyEmail(body.token);
     return { message: 'Email verified successfully' };
+  }
+
+  @Public()
+  @Get('setup-status')
+  @ApiOperation({ summary: 'Check whether the system has any users (first-run detection)' })
+  async setupStatus() {
+    return this.authService.getSetupStatus();
+  }
+
+  @Public()
+  @Post('init')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Initialize the system with the first admin user (only works on empty DB)' })
+  async initSystem(@Body() dto: InitSystemDto, @Req() req: Request) {
+    const userAgent = req.headers['user-agent'];
+    const ip = req.ip;
+    return this.authService.initializeSystem(dto, userAgent, ip);
   }
 
   @Get('me')
