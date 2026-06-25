@@ -2,11 +2,17 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import type { Request, Response } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Ensure tc_id_seq exists — TypeORM synchronize creates tables but not custom sequences.
+  // This is a no-op when the sequence already exists (created by migration or prior startup).
+  const dataSource = app.get(DataSource);
+  await dataSource.query(`CREATE SEQUENCE IF NOT EXISTS tc_id_seq START WITH 1 INCREMENT BY 1`);
   const configService = app.get(ConfigService);
 
   const apiPrefix = configService.get<string>('app.apiPrefix', 'api/v1');

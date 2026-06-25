@@ -149,6 +149,8 @@ export class SetupService {
       })) as unknown) as TestCase;
       testCases.push(tc);
     }
+    // Advance the sequence so the next real test case creation starts after the seeded IDs
+    await this.dataSource.query(`SELECT setval('tc_id_seq', ${tcDefs.length})`);
 
     // Releases
     const [release25, sprint24] = await this.releaseRepo.save([
