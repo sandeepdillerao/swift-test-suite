@@ -65,6 +65,16 @@ export const useCompleteCodegen = () => {
   });
 };
 
+export const useSaveCodegenDirect = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: string) => api.automation.saveCodegenDirect(sessionId),
+    onSuccess: (script) => {
+      queryClient.invalidateQueries({ queryKey: ['automationScripts', script.testCaseId] });
+    },
+  });
+};
+
 // ─── Script Generation Hooks ──────────────────────────────────────────────
 
 export const useGenerateScript = () => {

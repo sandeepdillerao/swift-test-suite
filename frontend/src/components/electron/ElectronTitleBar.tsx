@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Minus, Square, X, FlaskConical } from 'lucide-react'
+import { Minus, Square, X, FlaskConical, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // Rendered only on Windows/Linux in Electron mode.
@@ -27,8 +27,20 @@ export const ElectronTitleBar = (): JSX.Element | null => {
       className="flex items-center justify-between h-10 bg-slate-900 border-b border-slate-800 select-none flex-shrink-0"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
-      {/* App identity */}
-      <div className="flex items-center gap-2 px-3">
+      {/* Menu button + App identity */}
+      <div
+        className="flex items-center"
+        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      >
+        <TitleBarButton
+          onClick={() => window.electron?.popupMenu()}
+          className="hover:bg-slate-700 px-3"
+          title="Menu"
+        >
+          <Menu className="h-4 w-4" />
+        </TitleBarButton>
+      </div>
+      <div className="flex items-center gap-2 px-2 absolute left-1/2 -translate-x-1/2">
         <FlaskConical className="h-4 w-4 text-primary" />
         <span className="text-sm font-medium text-slate-300">TestFlow TCM</span>
       </div>

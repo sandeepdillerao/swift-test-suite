@@ -104,10 +104,14 @@ export const AppLayout = () => {
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar */}
+      {/* On Windows/Linux in Electron, offset by the 40px React title bar (ElectronTitleBar) */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen bg-card border-r border-border transition-all duration-300',
-          sidebarCollapsed ? 'w-16' : 'w-64'
+          'fixed left-0 z-40 bg-card border-r border-border transition-all duration-300',
+          sidebarCollapsed ? 'w-16' : 'w-64',
+          window.electron && window.electron.platform !== 'darwin'
+            ? 'top-10 h-[calc(100vh-2.5rem)]'
+            : 'top-0 h-screen'
         )}
       >
         {/* Logo */}
@@ -186,7 +190,10 @@ export const AppLayout = () => {
       >
         {/* Header — on macOS with hiddenInset the traffic lights sit in this bar */}
         <header
-          className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-xl px-6"
+          className={cn(
+            'sticky z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-xl px-6',
+            window.electron && window.electron.platform !== 'darwin' ? 'top-10' : 'top-0'
+          )}
           style={window.electron?.platform === 'darwin' ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
         >
           {/* On macOS with drag region on the header, interactive elements must opt out */}

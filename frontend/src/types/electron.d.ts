@@ -43,6 +43,7 @@ type ElectronChannel =
   | 'menu:toggle-sidebar'
   | 'menu:toggle-theme'
   | 'menu:show-about'
+  | 'playwright:install-progress'
 
 interface ElectronAPI {
   isElectron: true
@@ -68,6 +69,7 @@ interface ElectronAPI {
   maximize(): void
   close(): void
   isMaximized(): Promise<boolean>
+  popupMenu(): void
   showOpenDialog(options: { title?: string; filters?: Array<{ name: string; extensions: string[] }>; properties?: string[] }): Promise<string[] | null>
   showSaveDialog(options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }): Promise<string | null>
   showMessageDialog(options: { type?: string; title?: string; message: string; detail?: string; buttons?: string[] }): Promise<{ response: number }>
@@ -82,6 +84,7 @@ interface ElectronAPI {
   checkPgPort(host: string, port: number): Promise<{ ok: boolean; error?: string }>
   checkPgCredentials(cfg: { host: string; port: number; user: string; password: string; database: string }): Promise<{ ok: boolean; error?: string }>
   checkPlaywright(): Promise<{ ok: boolean; path: string }>
+  installPlaywright(): Promise<{ ok: boolean; error?: string }>
   getPlatformInfo(): Promise<{ platform: string; arch: string }>
   getSystemTheme(): Promise<'light' | 'dark'>
   on(channel: ElectronChannel, listener: (data?: unknown) => void): () => void

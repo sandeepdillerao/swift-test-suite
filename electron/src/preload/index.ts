@@ -43,6 +43,7 @@ const electronApi = {
   maximize: (): void => ipcRenderer.send('window:maximize'),
   close: (): void => ipcRenderer.send('window:close'),
   isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
+  popupMenu: (): void => ipcRenderer.send('window:popup-menu'),
 
   // ─── Dialogs ──────────────────────────────────────────────────────────
   showOpenDialog: (options: Electron.OpenDialogOptions): Promise<string[] | null> =>
@@ -75,6 +76,8 @@ const electronApi = {
     ipcRenderer.invoke('setup:check-pg-credentials', cfg),
   checkPlaywright: (): Promise<{ ok: boolean; path: string }> =>
     ipcRenderer.invoke('setup:check-playwright'),
+  installPlaywright: (): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('setup:install-playwright'),
   getPlatformInfo: (): Promise<{ platform: string; arch: string }> =>
     ipcRenderer.invoke('setup:get-platform-info'),
 
@@ -138,6 +141,7 @@ export type ElectronChannel =
   | 'menu:toggle-sidebar'
   | 'menu:toggle-theme'
   | 'menu:show-about'
+  | 'playwright:install-progress'
 
 export interface ElectronAPI {
   isElectron: true
@@ -163,6 +167,7 @@ export interface ElectronAPI {
   maximize(): void
   close(): void
   isMaximized(): Promise<boolean>
+  popupMenu(): void
   showOpenDialog(options: Electron.OpenDialogOptions): Promise<string[] | null>
   showSaveDialog(options: Electron.SaveDialogOptions): Promise<string | null>
   showMessageDialog(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue>

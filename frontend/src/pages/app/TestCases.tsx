@@ -145,7 +145,7 @@ export const TestCases = () => {
         accessorKey: 'tcId',
         header: 'ID',
         cell: ({ row }) => (
-          <span className="font-mono text-xs font-semibold text-primary">{row.getValue('tcId')}</span>
+          <span className="font-mono text-xs font-semibold text-primary hover:underline cursor-pointer">{row.getValue('tcId')}</span>
         ),
         size: 90,
       },
@@ -157,7 +157,7 @@ export const TestCases = () => {
           </Button>
         ),
         cell: ({ row }) => (
-          <div className="max-w-[250px] cursor-pointer hover:text-primary" onClick={() => handleView(row.original)}>
+          <div className="max-w-[250px]">
             <p className="font-medium truncate">{row.getValue('title')}</p>
             <p className="text-xs text-muted-foreground truncate">{row.original.description}</p>
           </div>
@@ -361,10 +361,16 @@ export const TestCases = () => {
               <TableBody>
                 {table.getRowModel().rows?.length ? (
                   table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id} className="cursor-pointer hover:bg-muted/50">
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                      ))}
+                    <TableRow key={row.id} className="cursor-pointer hover:bg-muted/50" onClick={() => handleView(row.original)}>
+                      {row.getVisibleCells().map((cell) => {
+                        // Stop row-level navigation for cells that have their own interactive elements
+                        const isInteractive = ['actions', 'status', 'priority', 'jiraTicketId'].includes(cell.column.id);
+                        return (
+                          <TableCell key={cell.id} onClick={isInteractive ? (e) => e.stopPropagation() : undefined}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        );
+                      })}
                     </TableRow>
                   ))
                 ) : (

@@ -23,18 +23,11 @@ export function createWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
 
-    // macOS: native traffic lights with hidden title bar
-    // Windows/Linux: frameless with our custom TitleBar overlay
+    // macOS: native traffic lights with hidden title bar.
+    // Windows/Linux: fully frameless — the React ElectronTitleBar component renders
+    // the title bar (with drag region + min/max/close IPC calls) in the renderer.
     frame: process.platform === 'darwin',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    // Native window controls overlay for Windows 11 style
-    ...(process.platform === 'win32' && {
-      titleBarOverlay: {
-        color: '#1e293b',
-        symbolColor: '#94a3b8',
-        height: 40,
-      },
-    }),
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
 
     backgroundColor: '#0f172a',
 

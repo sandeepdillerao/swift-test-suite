@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Server, Cloud, Database, CheckCircle2, XCircle, RefreshCw,
   ArrowRight, ArrowLeft, FlaskConical, Copy, Check,
-  AlertCircle, Loader2, Monitor, ChevronDown, ChevronUp,
+  AlertCircle, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,7 +63,7 @@ function CodeBlock({ code }: { code: string }) {
 
 export const SetupWizard = ({ onComplete }: Props): JSX.Element => {
   const [mode, setMode] = useState<Mode | null>(null)
-  const [step, setStep] = useState(1) // 1=choose, 2=pg, 3=db, 4=playwright, 5=done (local) / 2=remote-url, 3=done (remote)
+  const [step, setStep] = useState(1) // 1=choose, 2=pg, 3=db, 4=done (local) / 2=remote-url, 3=done (remote)
   const [platform, setPlatform] = useState<string>('darwin')
   const [pgExpanded, setPgExpanded] = useState(false)
 
@@ -79,11 +79,6 @@ export const SetupWizard = ({ onComplete }: Props): JSX.Element => {
   const [dbName, setDbName] = useState('testflow_db')
   const [dbCheck, setDbCheck] = useState<CheckState>('idle')
   const [dbError, setDbError] = useState('')
-
-  // ── Playwright (step 4 local) ──
-  const [pwCheck, setPwCheck] = useState<CheckState>('idle')
-  const [pwPath, setPwPath] = useState('')
-  const [pwExpanded, setPwExpanded] = useState(false)
 
   // ── Remote URL (step 2 remote) ──
   const [remoteUrl, setRemoteUrl] = useState('https://')
@@ -129,20 +124,6 @@ export const SetupWizard = ({ onComplete }: Props): JSX.Element => {
       setDbError(result.error ?? 'Authentication failed')
     }
   }
-
-  // ─── Playwright check ───────────────────────────────────────────────────
-
-  const checkPlaywright = useCallback(async () => {
-    setPwCheck('checking')
-    const result = await window.electron!.checkPlaywright()
-    setPwPath(result.path)
-    setPwCheck(result.ok ? 'ok' : 'fail')
-    if (!result.ok) setPwExpanded(true)
-  }, [])
-
-  useEffect(() => {
-    if (step === 4 && mode === 'local') checkPlaywright()
-  }, [step, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Remote URL check ───────────────────────────────────────────────────
 
@@ -198,12 +179,10 @@ export const SetupWizard = ({ onComplete }: Props): JSX.Element => {
     ? '# Open "SQL Shell (psql)" from the Start Menu'
     : 'psql -U postgres'
 
-  const pwInstallCmd = 'npx playwright install chromium'
-
   // ─── Step totals ────────────────────────────────────────────────────────
-  // Local: 1(choose) 2(pg) 3(db) 4(playwright) 5(done)
+  // Local: 1(choose) 2(pg) 3(db) 4(done)
   // Remote: 1(choose) 2(url) 3(done)
-  const totalSteps = mode === 'local' ? 5 : mode === 'remote' ? 3 : 1
+  const totalSteps = mode === 'local' ? 4 : mode === 'remote' ? 3 : 1
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -365,69 +344,13 @@ export const SetupWizard = ({ onComplete }: Props): JSX.Element => {
               onBack={() => setStep(2)}
               onNext={() => setStep(4)}
               nextDisabled={dbCheck !== 'ok'}
-              nextLabel="Next: Automation browsers"
+              nextLabel="Finish setup"
             />
           </WizardCard>
         )}
 
-        {/* ── Step 4 (local): Playwright ── */}
+        {/* ── Step 4 (local): Done ── */}
         {step === 4 && mode === 'local' && (
-          <WizardCard
-            icon={<Monitor className="h-5 w-5 text-primary" />}
-            title="Automation browsers"
-            subtitle="Playwright browsers are needed to record and run test scripts. You can skip this and install them later."
-            status={pwCheck}
-            statusText={{
-              idle: 'Checking…',
-              checking: 'Looking for Playwright browsers…',
-              ok: 'Chromium browser is installed and ready',
-              fail: 'Playwright browsers not found',
-            }[pwCheck]}
-          >
-            {pwCheck === 'fail' && (
-              <div className="mt-3">
-                <button
-                  onClick={() => setPwExpanded(v => !v)}
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  {pwExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  {pwExpanded ? 'Hide' : 'Show'} install instructions
-                </button>
-                {pwExpanded && (
-                  <div className="mt-2 space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      Requires <strong>Node.js 20+</strong> — download from{' '}
-                      <button
-                        onClick={() => window.electron?.openExternal('https://nodejs.org')}
-                        className="text-primary underline"
-                      >nodejs.org</button>.
-                      Then run in a terminal:
-                    </p>
-                    <CodeBlock code={pwInstallCmd} />
-                    <p className="text-xs text-muted-foreground">Downloads ~200MB of browser binaries. After installing, click <strong>Check again</strong>.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="flex gap-2 mt-3">
-              <Button variant="outline" size="sm" className="gap-2" onClick={checkPlaywright} disabled={pwCheck === 'checking'}>
-                {pwCheck === 'checking' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Check again
-              </Button>
-            </div>
-
-            <WizardNav
-              onBack={() => setStep(3)}
-              onNext={() => setStep(5)}
-              nextLabel={pwCheck === 'ok' ? 'Next: All done!' : 'Skip for now'}
-              nextVariant={pwCheck === 'ok' ? 'default' : 'outline'}
-            />
-          </WizardCard>
-        )}
-
-        {/* ── Step 5 (local): Done ── */}
-        {step === 5 && mode === 'local' && (
           <WizardCard
             icon={<CheckCircle2 className="h-5 w-5 text-emerald-500" />}
             title="You're all set!"
@@ -438,7 +361,7 @@ export const SetupWizard = ({ onComplete }: Props): JSX.Element => {
             <div className="mt-3 space-y-2">
               <SummaryRow icon="ok" label={`PostgreSQL on ${pgHost}:${pgPort}`} />
               <SummaryRow icon="ok" label={`Database "${dbName}" as "${dbUser}"`} />
-              <SummaryRow icon={pwCheck === 'ok' ? 'ok' : 'skip'} label={`Playwright browsers ${pwCheck === 'ok' ? 'installed' : '(skipped — install later)'}`} />
+              <SummaryRow icon="skip" label="Chromium will download automatically in the background (~170 MB)" />
             </div>
 
             <Button className="w-full mt-5 gap-2" size="lg" onClick={saveLocal}>

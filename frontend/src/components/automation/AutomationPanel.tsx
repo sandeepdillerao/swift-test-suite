@@ -4,7 +4,7 @@ import {
   Play, Sparkles, Upload, Code2, Clock, CheckCircle2, XCircle,
   AlertCircle, Loader2, Trash2, Shield, Activity, ChevronDown,
   ChevronRight, Copy, Terminal, Eye, Monitor, Zap, Square, ImageIcon,
-  Maximize2, Minimize2, Variable,
+  Maximize2, Minimize2, Variable, Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,7 +26,7 @@ import {
   useAutomationScripts, useGenerateScript, useImportCodegenScript,
   useUpdateScript, useDeleteScript, useExecuteScript, useScriptExecutions,
   useCancelExecution, useStartCodegen, useCodegenStatus, useStopCodegen,
-  useCompleteCodegen,
+  useCompleteCodegen, useSaveCodegenDirect,
 } from '@/hooks/useAutomation';
 import { useEnvironments } from '@/hooks/useEnvironments';
 import type { ProjectEnvironment } from '@/types';
@@ -307,6 +307,7 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
   const startCodegen = useStartCodegen();
   const stopCodegen = useStopCodegen();
   const completeCodegen = useCompleteCodegen();
+  const saveCodegenDirect = useSaveCodegenDirect();
 
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [targetUrl, setTargetUrl] = useState('');
@@ -316,6 +317,7 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
   const [codegenSessionId, setCodegenSessionId] = useState<string | null>(null);
   const [generationMode, setGenerationMode] = useState<GenerationMode>('record');
   const [selectedEnvId, setSelectedEnvId] = useState<string>('');
+  const [chromiumNeeded, setChromiumNeeded] = useState(false);
 
   const { data: codegenStatus } = useCodegenStatus(codegenSessionId || undefined);
 
@@ -347,7 +349,17 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
           setCodegenSessionId(result.sessionId);
           toast.success('Browser opened — perform your test flow, then close the browser');
         },
-        onError: (err: any) => toast.error(err.message || 'Failed to start codegen'),
+        onError: (err: any) => {
+          const msg: string = err?.message || err?.detail || String(err);
+          const isChromiumError = msg.includes('Chromium browser is not installed') ||
+            msg.includes("Executable doesn't exist") ||
+            msg.includes('playwright install');
+          if (isChromiumError && window.electron) {
+            setChromiumNeeded(true);
+          } else {
+            toast.error(msg || 'Failed to start codegen');
+          }
+        },
       },
     );
   }, [startCodegen, testCaseId, projectId, targetUrl, browserType]);
@@ -367,11 +379,24 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
         setSelectedScriptId(script.id);
         setGenerateDialogOpen(false);
         setCodegenSessionId(null);
-        toast.success('Script generated from codegen recording + AI');
+        toast.success('Script generated from recording + AI');
       },
       onError: (err: any) => toast.error(err.message || 'Failed to generate script from recording'),
     });
   }, [completeCodegen, codegenSessionId]);
+
+  const handleSaveCodegenDirect = useCallback(() => {
+    if (!codegenSessionId) return;
+    saveCodegenDirect.mutate(codegenSessionId, {
+      onSuccess: (script) => {
+        setSelectedScriptId(script.id);
+        setGenerateDialogOpen(false);
+        setCodegenSessionId(null);
+        toast.success('Recording saved as script');
+      },
+      onError: (err: any) => toast.error(err.message || 'Failed to save recording'),
+    });
+  }, [saveCodegenDirect, codegenSessionId]);
 
   const handleGenerate = useCallback(() => {
     generateScript.mutate(
@@ -529,11 +554,15 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
         onStartRecording={handleStartRecording}
         onStopRecording={handleStopRecording}
         onCompleteCodegen={handleCompleteCodegen}
+        onSaveCodegenDirect={handleSaveCodegenDirect}
         onGenerate={handleGenerate}
-        onResetSession={() => setCodegenSessionId(null)}
+        onResetSession={() => { setCodegenSessionId(null); setChromiumNeeded(false); }}
+        chromiumNeeded={chromiumNeeded}
+        onChromiumInstalled={() => setChromiumNeeded(false)}
         isStartingCodegen={startCodegen.isPending}
         isStoppingCodegen={stopCodegen.isPending}
         isCompletingCodegen={completeCodegen.isPending}
+        isSavingDirect={saveCodegenDirect.isPending}
         isGenerating={generateScript.isPending}
         environments={environments}
         selectedEnvId={selectedEnvId}
@@ -618,9 +647,10 @@ function GenerateDialog({
   codegenScript, onCodegenScriptChange,
   codegenSessionId, codegenStatus,
   isRecording, recordingDone,
-  onStartRecording, onStopRecording, onCompleteCodegen, onGenerate, onResetSession,
-  isStartingCodegen, isStoppingCodegen, isCompletingCodegen, isGenerating,
+  onStartRecording, onStopRecording, onCompleteCodegen, onSaveCodegenDirect, onGenerate, onResetSession,
+  isStartingCodegen, isStoppingCodegen, isCompletingCodegen, isSavingDirect, isGenerating,
   environments, selectedEnvId, onEnvChange,
+  chromiumNeeded, onChromiumInstalled,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -639,15 +669,19 @@ function GenerateDialog({
   onStartRecording: () => void;
   onStopRecording: () => void;
   onCompleteCodegen: () => void;
+  onSaveCodegenDirect: () => void;
   onGenerate: () => void;
   onResetSession: () => void;
   isStartingCodegen: boolean;
   isStoppingCodegen: boolean;
   isCompletingCodegen: boolean;
+  isSavingDirect: boolean;
   isGenerating: boolean;
   environments: ProjectEnvironment[];
   selectedEnvId: string;
   onEnvChange: (envId: string) => void;
+  chromiumNeeded: boolean;
+  onChromiumInstalled: () => void;
 }) {
   const selectedEnv = environments.find((e) => e.id === selectedEnvId);
   return (
@@ -712,10 +746,14 @@ function GenerateDialog({
                 onStartRecording={onStartRecording}
                 onStopRecording={onStopRecording}
                 onCompleteCodegen={onCompleteCodegen}
+                onSaveCodegenDirect={onSaveCodegenDirect}
                 onResetSession={onResetSession}
                 isStarting={isStartingCodegen}
                 isStopping={isStoppingCodegen}
                 isCompleting={isCompletingCodegen}
+                isSavingDirect={isSavingDirect}
+                chromiumNeeded={chromiumNeeded}
+                onChromiumInstalled={onChromiumInstalled}
               />
             </TabsContent>
 
@@ -785,8 +823,9 @@ function GenerateDialog({
 function RecordModeContent({
   codegenSessionId, codegenStatus, isRecording, recordingDone,
   targetUrl, onUrlChange, browserType, onBrowserChange,
-  onStartRecording, onStopRecording, onCompleteCodegen, onResetSession,
-  isStarting, isStopping, isCompleting,
+  onStartRecording, onStopRecording, onCompleteCodegen, onSaveCodegenDirect, onResetSession,
+  isStarting, isStopping, isCompleting, isSavingDirect,
+  chromiumNeeded, onChromiumInstalled,
 }: {
   codegenSessionId: string | null;
   codegenStatus: any;
@@ -799,11 +838,20 @@ function RecordModeContent({
   onStartRecording: () => void;
   onStopRecording: () => void;
   onCompleteCodegen: () => void;
+  onSaveCodegenDirect: () => void;
   onResetSession: () => void;
   isStarting: boolean;
   isStopping: boolean;
   isCompleting: boolean;
+  isSavingDirect: boolean;
+  chromiumNeeded: boolean;
+  onChromiumInstalled: () => void;
 }) {
+  // Chromium not installed — show install panel immediately (API-level error)
+  if (chromiumNeeded && window.electron) {
+    return <ChromiumInstallPanel onDone={onChromiumInstalled} />;
+  }
+
   // Initial state — show config + start button
   if (!codegenSessionId) {
     return (
@@ -862,10 +910,11 @@ function RecordModeContent({
     );
   }
 
-  // Recording complete — preview + generate
+  // Recording complete — preview + two options
   if (recordingDone) {
     const recordedScript = codegenStatus!.recordedScript!;
     const lineCount = recordedScript.split('\n').length;
+    const isBusy = isCompleting || isSavingDirect;
 
     return (
       <div className="space-y-4">
@@ -884,22 +933,59 @@ function RecordModeContent({
               <Copy className="h-3 w-3 mr-1" /> Copy
             </Button>
           </div>
-          <CodeViewer value={recordedScript} height="200px" allowFullscreen={false} />
+          <CodeViewer value={recordedScript} height="180px" allowFullscreen={false} />
         </div>
 
-        <Button className="w-full" size="lg" onClick={onCompleteCodegen} disabled={isCompleting}>
-          {isCompleting ? (
-            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> AI is enhancing your recording...</>
-          ) : (
-            <><Sparkles className="h-4 w-4 mr-2" /> Generate Script with AI</>
-          )}
+        {/* Two action options */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={onSaveCodegenDirect}
+              disabled={isBusy}
+            >
+              {isSavingDirect
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Code2 className="h-4 w-4" />}
+              Save As-Is
+            </Button>
+            <p className="text-xs text-center text-muted-foreground">Save the raw recording directly</p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Button
+              className="w-full gap-2"
+              onClick={onCompleteCodegen}
+              disabled={isBusy}
+            >
+              {isCompleting
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Sparkles className="h-4 w-4" />}
+              Enhance with AI
+            </Button>
+            <p className="text-xs text-center text-muted-foreground">AI cleans up &amp; adds assertions</p>
+          </div>
+        </div>
+
+        <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={onResetSession} disabled={isBusy}>
+          Record Again
         </Button>
       </div>
     );
   }
 
-  // Recording failed
+  // Recording failed — check if it's a missing Chromium browser
   if (codegenStatus?.status === 'failed') {
+    const isChromiumMissing =
+      codegenStatus.error === 'CHROMIUM_NOT_INSTALLED' ||
+      (codegenStatus.error || '').includes("Executable doesn't exist") ||
+      (codegenStatus.error || '').includes('playwright install') ||
+      (codegenStatus.error || '').includes('Chromium browser is not installed');
+
+    if (isChromiumMissing && window.electron) {
+      return <ChromiumInstallPanel onDone={onResetSession} />;
+    }
+
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
@@ -915,6 +1001,113 @@ function RecordModeContent({
   }
 
   return null;
+}
+
+// ─── Chromium Install Panel ───────────────────────────────────────────────────
+
+function ChromiumInstallPanel({ onDone }: { onDone: () => void }) {
+  const [state, setState] = useState<'idle' | 'installing' | 'done' | 'error'>('idle');
+  const [log, setLog] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const install = useCallback(async () => {
+    setState('installing');
+    setLog([]);
+    setErrorMsg('');
+
+    const unsub = window.electron!.on('playwright:install-progress', (data) => {
+      const line = String(data ?? '');
+      if (line === '__start__' || line === '__done__' || line.startsWith('__error__:')) return;
+      if (line.trim()) setLog((prev) => [...prev, line]);
+    });
+
+    const result = await window.electron!.installPlaywright();
+    unsub();
+
+    if (result.ok) {
+      setState('done');
+    } else {
+      setState('error');
+      setErrorMsg(result.error ?? 'Installation failed');
+    }
+  }, []);
+
+  if (state === 'idle') {
+    return (
+      <div className="space-y-4">
+        <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800">
+          <div className="flex items-start gap-3">
+            <Download className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Chromium browser not found</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                The automation browser (~170 MB) needs to be downloaded before recording. This happens once.
+              </p>
+            </div>
+          </div>
+        </div>
+        <Button className="w-full gap-2" onClick={install}>
+          <Download className="h-4 w-4" /> Download Chromium &amp; Start Recording
+        </Button>
+        <Button variant="ghost" size="sm" className="w-full" onClick={onDone}>Cancel</Button>
+      </div>
+    );
+  }
+
+  if (state === 'installing') {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
+          Downloading Chromium browser… this may take a few minutes.
+        </div>
+        {log.length > 0 && (
+          <div className="rounded-lg border border-border bg-muted/40 p-3 max-h-40 overflow-y-auto">
+            {log.map((line, i) => (
+              <p key={i} className="text-xs font-mono leading-relaxed">{line}</p>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (state === 'done') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+          <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-green-700 dark:text-green-400">Chromium installed!</p>
+            <p className="text-xs text-green-600 dark:text-green-300">Click below to start recording.</p>
+          </div>
+        </div>
+        <Button className="w-full gap-2" onClick={onDone}>
+          <Play className="h-4 w-4" /> Start Recording
+        </Button>
+      </div>
+    );
+  }
+
+  // error state
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800">
+        <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-red-700 dark:text-red-400">Download failed</p>
+          <p className="text-xs text-red-600 dark:text-red-300 mt-1">{errorMsg}</p>
+          <p className="text-xs text-red-600 dark:text-red-300 mt-1">Check your internet connection and try again.</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button className="flex-1 gap-2" onClick={install}>
+          <Download className="h-4 w-4" /> Retry Download
+        </Button>
+        <Button variant="outline" onClick={onDone}>Cancel</Button>
+      </div>
+    </div>
+  );
 }
 
 // ─── Script Detail ───────────────────────────────────────────────────────────

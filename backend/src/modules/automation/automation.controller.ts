@@ -63,6 +63,13 @@ export class AutomationController {
     return this.service.completeCodegenFlow(user.id, sessionId);
   }
 
+  @Post('codegen/:sessionId/save-direct')
+  @Roles(UserRole.ADMIN, UserRole.QA_LEAD, UserRole.TESTER)
+  @ApiOperation({ summary: 'Save codegen recording as-is without AI processing' })
+  saveCodegenDirect(@CurrentUser() user: User, @Param('sessionId') sessionId: string) {
+    return this.service.saveCodegenDirect(user.id, sessionId);
+  }
+
   // ─── Script Generation ────────────────────────────────────────────────────
 
   @Post('scripts/generate')

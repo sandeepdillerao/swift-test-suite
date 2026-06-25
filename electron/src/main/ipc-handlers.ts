@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, shell, Notification, safeStorage, nativeTheme } from 'electron'
+import { app, ipcMain, dialog, shell, Notification, safeStorage, nativeTheme, Menu } from 'electron'
 import { store, getEffectiveApiUrl, type ServerMode } from './store'
 import { getMainWindow } from './window-manager'
 import { startBackend, stopBackend, restartBackend, isBackendRunning } from './backend-manager'
@@ -6,7 +6,31 @@ import net from 'net'
 import os from 'os'
 import path from 'path'
 import fs from 'fs'
+import { spawn } from 'child_process'
+import { is } from '@electron-toolkit/utils'
 import { Client as PgClient } from 'pg'
+
+/**
+ * Locate @playwright/test/cli.js.
+ * Production: bundled at resources/playwright/node_modules/@playwright/test/cli.js
+ * Dev: walk up from __dirname until node_modules/@playwright/test/cli.js is found.
+ *      (Hardcoded ../.. counts are fragile — the compiled output dir depth varies.)
+ */
+function findPlaywrightCli(): string | null {
+  if (!is.dev) {
+    const prod = path.join(process.resourcesPath, 'playwright', 'node_modules', '@playwright', 'test', 'cli.js')
+    return fs.existsSync(prod) ? prod : null
+  }
+  let dir = __dirname
+  for (let i = 0; i < 10; i++) {
+    const candidate = path.join(dir, 'node_modules', '@playwright', 'test', 'cli.js')
+    if (fs.existsSync(candidate)) return candidate
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return null
+}
 
 export function setupIpcHandlers(): void {
   // ─── App version / name ──────────────────────────────────────────────────
@@ -132,6 +156,13 @@ export function setupIpcHandlers(): void {
   ipcMain.handle('window:is-maximized', () => getMainWindow()?.isMaximized() ?? false)
   ipcMain.handle('window:get-platform', () => process.platform)
 
+  // Pop up the native application menu at the current cursor position.
+  // Used by the custom Windows title bar since frame:false hides the menu bar.
+  ipcMain.on('window:popup-menu', () => {
+    const menu = Menu.getApplicationMenu()
+    if (menu) menu.popup({ window: getMainWindow() ?? undefined })
+  })
+
   app.on('browser-window-created', (_event, win) => {
     win.on('maximize', () => win.webContents.send('window:maximized-changed', true))
     win.on('unmaximize', () => win.webContents.send('window:maximized-changed', false))
@@ -228,25 +259,72 @@ export function setupIpcHandlers(): void {
   // 3. Check if Playwright Chromium binary is installed on this machine
   ipcMain.handle('setup:check-playwright', () => {
     const home = os.homedir()
-    const cachePaths =
+    const base =
       process.platform === 'darwin'
-        ? [path.join(home, 'Library', 'Caches', 'ms-playwright')]
+        ? path.join(home, 'Library', 'Caches', 'ms-playwright')
         : process.platform === 'win32'
-          ? [path.join(process.env['LOCALAPPDATA'] || home, 'ms-playwright')]
-          : [path.join(home, '.cache', 'ms-playwright')]
+          ? path.join(process.env['LOCALAPPDATA'] || home, 'ms-playwright')
+          : path.join(home, '.cache', 'ms-playwright')
 
-    for (const base of cachePaths) {
-      if (!fs.existsSync(base)) continue
-      const dirs = fs.readdirSync(base)
-      const hasChromium = dirs.some(
-        (d) => d.startsWith('chromium-') || d.startsWith('chromium_headless_shell-'),
-      )
-      if (hasChromium) return { ok: true, path: base }
+    function exeExists(chromiumDir: string): boolean {
+      if (process.platform === 'win32') return fs.existsSync(path.join(chromiumDir, 'chrome-win64', 'chrome.exe'))
+      if (process.platform === 'darwin') {
+        const app = path.join('Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing')
+        return fs.existsSync(path.join(chromiumDir, 'chrome-mac-arm64', app)) ||
+               fs.existsSync(path.join(chromiumDir, 'chrome-mac-x64', app))
+      }
+      return fs.existsSync(path.join(chromiumDir, 'chrome-linux64', 'chrome'))
     }
-    return { ok: false, path: cachePaths[0] }
+
+    if (fs.existsSync(base)) {
+      const ready = fs.readdirSync(base)
+        .filter(d => d.startsWith('chromium-'))
+        .some(d => exeExists(path.join(base, d)))
+      if (ready) return { ok: true, path: base }
+    }
+    return { ok: false, path: base }
   })
 
-  // 4. Return install instructions per platform
+  // 4. Install Playwright Chromium using the bundled CLI + Electron's own Node runtime.
+  //    Streams progress lines to the renderer via 'playwright:install-progress' events.
+  //    No separate Node.js or npm install required on the user's machine.
+  ipcMain.handle('setup:install-playwright', () => {
+    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+      const cliPath = findPlaywrightCli()
+      if (!cliPath) {
+        resolve({ ok: false, error: 'Playwright CLI not found. In dev mode run: npm install (from the repo root).' })
+        return
+      }
+
+      const send = (line: string) =>
+        getMainWindow()?.webContents.send('playwright:install-progress', line)
+
+      send('Starting Chromium download (~170MB)…')
+
+      const proc = spawn(process.execPath, [cliPath, 'install', 'chromium'], {
+        shell: false,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      })
+
+      proc.stdout?.on('data', (d: Buffer) => {
+        d.toString().split('\n').filter(Boolean).forEach(send)
+      })
+      proc.stderr?.on('data', (d: Buffer) => {
+        d.toString().split('\n').filter(Boolean).forEach(send)
+      })
+      proc.on('close', (code) => {
+        if (code === 0) {
+          send('✅ Chromium installed successfully!')
+          resolve({ ok: true })
+        } else {
+          resolve({ ok: false, error: `playwright install exited with code ${code}` })
+        }
+      })
+      proc.on('error', (err) => resolve({ ok: false, error: err.message }))
+    })
+  })
+
+  // 5. Return install instructions per platform
   ipcMain.handle('setup:get-platform-info', () => ({
     platform: process.platform,
     arch: process.arch,

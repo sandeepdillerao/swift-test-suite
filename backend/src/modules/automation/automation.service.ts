@@ -46,53 +46,111 @@ const ARTIFACTS_ROOT = process.env.UPLOADS_DIR
   : path.resolve(process.cwd(), 'uploads', 'automation');
 
 /**
- * Resolve the Playwright CLI binary path.
+ * Describes how to spawn the Playwright CLI.
  *
- * Search order:
- *  1. PLAYWRIGHT_NODE_MODULES env var — set by Electron main process to the
- *     user-data node_modules directory (writable, where the user installs PW).
- *  2. Relative to __dirname — works in dev/web mode (backend/dist → backend/node_modules
- *     or workspace/node_modules).
- *  3. 'playwright' — falls back to whatever is on PATH (global install).
+ * Two strategies are used depending on what's available:
+ *
+ *  A) JS-CLI strategy (preferred in Electron): run @playwright/test/cli.js directly
+ *     using the current Node/Electron executable. Works cross-platform, requires no
+ *     global Node.js, and works with the playwright packages bundled as extraResources.
+ *
+ *  B) Binary strategy (dev/web mode): use the .bin/playwright (macOS/Linux) or
+ *     .bin/playwright.cmd (Windows) shim found in node_modules.
  */
+interface PlaywrightRunner {
+  executable: string;
+  prependArgs: string[];
+  shell: boolean;
+  extraEnv: NodeJS.ProcessEnv;
+}
+
 /** Returns the node_modules directory that contains @playwright/test. */
 function resolvePlaywrightNodeModules(): string {
-  if (process.env.PLAYWRIGHT_NODE_MODULES) {
-    if (fs.existsSync(path.join(process.env.PLAYWRIGHT_NODE_MODULES, '@playwright', 'test'))) {
-      return process.env.PLAYWRIGHT_NODE_MODULES;
-    }
-  }
-  const candidates = [
+  const searchRoots = [
+    process.env.PLAYWRIGHT_NODE_MODULES,
     path.resolve(__dirname, '..', '..', '..', 'node_modules'),
     path.resolve(__dirname, '..', '..', '..', '..', 'node_modules'),
     path.resolve(__dirname, '..', '..', '..', '..', '..', 'node_modules'),
-  ];
-  for (const nm of candidates) {
+  ].filter(Boolean) as string[];
+
+  for (const nm of searchRoots) {
     if (fs.existsSync(path.join(nm, '@playwright', 'test'))) return nm;
   }
   return '';
 }
 
-function resolvePlaywrightBin(): string {
-  // 1. Electron desktop: user-data node_modules
-  if (process.env.PLAYWRIGHT_NODE_MODULES) {
-    const bin = path.join(process.env.PLAYWRIGHT_NODE_MODULES, '.bin', 'playwright');
-    if (fs.existsSync(bin)) return bin;
-  }
+function resolvePlaywrightRunner(): PlaywrightRunner {
+  const isWindows = process.platform === 'win32';
 
-  // 2. Dev / web-server mode: walk up from __dirname
-  const candidates = [
+  // Strategy A: find @playwright/test/cli.js and run it with the current Node executable.
+  // This is the Electron-packaged path: no global playwright or Node needed.
+  // In Electron, process.execPath is the Electron binary; ELECTRON_RUN_AS_NODE=1 makes
+  // it behave as plain Node.js. In dev/web mode, process.execPath is regular node.
+  const nmRoots = [
+    process.env.PLAYWRIGHT_NODE_MODULES,
     path.resolve(__dirname, '..', '..', '..', 'node_modules'),
     path.resolve(__dirname, '..', '..', '..', '..', 'node_modules'),
     path.resolve(__dirname, '..', '..', '..', '..', '..', 'node_modules'),
-  ];
-  for (const nm of candidates) {
-    const bin = path.join(nm, '.bin', 'playwright');
-    if (fs.existsSync(bin)) return bin;
+  ].filter(Boolean) as string[];
+
+  for (const nm of nmRoots) {
+    const cliJs = path.join(nm, '@playwright', 'test', 'cli.js');
+    if (fs.existsSync(cliJs)) {
+      const isElectron = !!process.env.ELECTRON_RUN_AS_NODE;
+      return {
+        executable: process.execPath,
+        prependArgs: [cliJs],
+        shell: false,
+        extraEnv: isElectron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
+      };
+    }
   }
 
-  // 3. Global / PATH fallback
-  return 'playwright';
+  // Strategy B: .bin/playwright shim (dev mode on macOS/Linux, or global install).
+  // On Windows, .cmd files require shell:true; on Unix the shim is directly executable.
+  const binName = isWindows ? 'playwright.cmd' : 'playwright';
+  for (const nm of nmRoots) {
+    const bin = path.join(nm, '.bin', binName);
+    if (fs.existsSync(bin)) {
+      return { executable: bin, prependArgs: [], shell: isWindows, extraEnv: {} };
+    }
+  }
+
+  // Last resort: hope playwright is on PATH (global install).
+  return { executable: 'playwright', prependArgs: [], shell: isWindows, extraEnv: {} };
+}
+
+function chromiumExeExists(chromiumDir: string): boolean {
+  if (process.platform === 'win32') {
+    return fs.existsSync(path.join(chromiumDir, 'chrome-win64', 'chrome.exe'));
+  }
+  if (process.platform === 'darwin') {
+    const app = path.join('Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing');
+    return (
+      fs.existsSync(path.join(chromiumDir, 'chrome-mac-arm64', app)) ||
+      fs.existsSync(path.join(chromiumDir, 'chrome-mac-x64', app))
+    );
+  }
+  return fs.existsSync(path.join(chromiumDir, 'chrome-linux64', 'chrome'));
+}
+
+function defaultBrowsersPath(): string {
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Caches', 'ms-playwright');
+  if (process.platform === 'win32') return path.join(process.env['LOCALAPPDATA'] || os.homedir(), 'ms-playwright');
+  return path.join(os.homedir(), '.cache', 'ms-playwright');
+}
+
+/**
+ * Returns true only when the Chromium executable actually exists.
+ * Falls back to the platform default when PLAYWRIGHT_BROWSERS_PATH is not set
+ * (e.g. in dev mode where the backend runs standalone, not via Electron).
+ */
+function isChromiumReady(): boolean {
+  const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH || defaultBrowsersPath();
+  if (!fs.existsSync(browsersPath)) return false;
+  return fs.readdirSync(browsersPath)
+    .filter((d) => d.startsWith('chromium-'))
+    .some((d) => chromiumExeExists(path.join(browsersPath, d)));
 }
 
 @Injectable()
@@ -118,13 +176,19 @@ export class AutomationService {
   // ─── Codegen Session Management ───────────────────────────────────────────
 
   async startCodegen(userId: string, dto: StartCodegenDto): Promise<{ sessionId: string; status: string }> {
+    if (!isChromiumReady()) {
+      throw new BadRequestException(
+        'Chromium browser is not installed yet. TestFlow is downloading it automatically — please wait a few minutes and try again.',
+      );
+    }
+
     const testCase = await this.testCaseRepo.findOne({ where: { id: dto.testCaseId } });
     if (!testCase) throw new NotFoundException('Test case not found');
 
     const sessionId = uuidv4();
     const outputFile = path.join(os.tmpdir(), `codegen-${sessionId}.ts`);
 
-    const playwrightBin = resolvePlaywrightBin();
+    const runner = resolvePlaywrightRunner();
     const url = dto.targetUrl || 'http://localhost:3000';
     const browser = dto.browserType || BrowserType.CHROMIUM;
 
@@ -144,20 +208,16 @@ export class AutomationService {
       error: null,
     };
 
-    // Spawn playwright codegen — opens a browser on the user's machine.
-    // shell: false avoids splitting paths that contain spaces (e.g. inside a macOS .app bundle).
-    const args = ['codegen', '--output', outputFile, '--browser', browser, url];
-    this.logger.log(`Starting codegen session ${sessionId}: ${playwrightBin} ${args.join(' ')}`);
+    const codegenArgs = [...runner.prependArgs, 'codegen', '--output', outputFile, '--browser', browser, url];
+    this.logger.log(`Starting codegen ${sessionId}: ${runner.executable} ${codegenArgs.join(' ')}`);
 
     const nodeModulesPath = resolvePlaywrightNodeModules();
-    const proc = spawn(playwrightBin, args, {
-      shell: false,
+    const proc = spawn(runner.executable, codegenArgs, {
+      shell: runner.shell,
       env: {
         ...process.env,
+        ...runner.extraEnv,
         NODE_PATH: nodeModulesPath,
-        // Do NOT override PLAYWRIGHT_BROWSERS_PATH — let Playwright use its own
-        // platform default (~/.cache on Linux, ~/Library/Caches on macOS, %LOCALAPPDATA% on Windows).
-        // Only pass it if already set externally (e.g. Electron main process sets it for packaged app).
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -183,7 +243,11 @@ export class AutomationService {
         }
       } else {
         s.status = code === null ? 'failed' : (code === 0 ? 'completed' : 'failed');
-        s.error = stderr.trim() || `Codegen process exited with code ${code}`;
+        const rawError = stderr.trim() || `Codegen process exited with code ${code}`;
+        const isChromiumMissing = rawError.includes("Executable doesn't exist") ||
+          rawError.includes('Please run the following command to download new browsers') ||
+          rawError.includes('playwright install');
+        s.error = isChromiumMissing ? 'CHROMIUM_NOT_INSTALLED' : rawError;
         // Still try to read partial output
         if (fs.existsSync(outputFile)) {
           try { s.recordedScript = fs.readFileSync(outputFile, 'utf-8'); s.status = 'completed'; } catch { /* ignore */ }
@@ -275,6 +339,38 @@ export class AutomationService {
     this.codegenSessions.delete(sessionId);
 
     return result;
+  }
+
+  /** Save the raw codegen recording as the script — no AI processing. */
+  async saveCodegenDirect(userId: string, sessionId: string): Promise<AutomationScript> {
+    const session = this.codegenSessions.get(sessionId);
+    if (!session) throw new NotFoundException('Codegen session not found');
+    if (!session.recordedScript?.trim()) {
+      throw new BadRequestException('No codegen recording found. Record some actions first.');
+    }
+
+    const testCase = await this.testCaseRepo.findOne({ where: { id: session.testCaseId } });
+    if (!testCase) throw new NotFoundException('Test case not found');
+
+    const script = this.scriptRepo.create({
+      testCaseId: session.testCaseId,
+      projectId: session.projectId,
+      name: `${testCase.tcId} - ${testCase.title}`,
+      rawScript: session.recordedScript,
+      cleanScript: session.recordedScript,
+      healedScript: null,
+      activeScript: session.recordedScript,
+      targetUrl: session.targetUrl || null,
+      status: ScriptStatus.READY,
+      source: ScriptSource.CODEGEN,
+      browserType: session.browserType,
+      stabilityScore: 75,
+      createdBy: userId,
+    });
+
+    const saved = await this.scriptRepo.save(script);
+    this.codegenSessions.delete(sessionId);
+    return saved;
   }
 
   // ─── Codegen-First Generation (Codegen + Test Case + Jira → AI) ──────────
@@ -374,6 +470,12 @@ export class AutomationService {
   // ─── Script Execution ────────────────────────────────────────────────────────
 
   async executeScript(userId: string, scriptId: string, dto: ExecuteScriptDto): Promise<ScriptExecution> {
+    if (!isChromiumReady()) {
+      throw new BadRequestException(
+        'Chromium browser is not installed yet. TestFlow is downloading it automatically — please wait a few minutes and try again.',
+      );
+    }
+
     const script = await this.scriptRepo.findOne({ where: { id: scriptId } });
     if (!script) throw new NotFoundException('Automation script not found');
 
@@ -475,8 +577,8 @@ module.exports = defineConfig({
       fs.writeFileSync(scriptPath, cjsScriptContent, 'utf-8');
 
       // Execute playwright (track process for cancellation)
-      const playwrightBin = resolvePlaywrightBin();
-      const { stdout, stderr, exitCode } = await this.spawnPlaywright(playwrightBin, tmpDir, execution.id);
+      const runner = resolvePlaywrightRunner();
+      const { stdout, stderr, exitCode } = await this.spawnPlaywright(runner, tmpDir, execution.id);
       const duration = Date.now() - startTime;
 
       // ─── Collect & persist artifacts ──────────────────────────────────
@@ -689,19 +791,20 @@ module.exports = defineConfig({
     return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
   }
 
-  private spawnPlaywright(playwrightBin: string, cwd: string, executionId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  private spawnPlaywright(runner: PlaywrightRunner, cwd: string, executionId?: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve) => {
       const nodeModulesPath = resolvePlaywrightNodeModules();
-      const proc = spawn(playwrightBin, ['test', '--config=playwright.config.ts'], {
+      const testArgs = [...runner.prependArgs, 'test', '--config=playwright.config.ts'];
+      const proc = spawn(runner.executable, testArgs, {
         cwd,
-        shell: false,
+        shell: runner.shell,
         timeout: 120000,
         env: {
           ...process.env,
+          ...runner.extraEnv,
           // NODE_PATH lets the temp playwright.config.ts resolve @playwright/test
           // even though there's no node_modules in the tmp directory
           NODE_PATH: nodeModulesPath,
-          // Do NOT override PLAYWRIGHT_BROWSERS_PATH — let Playwright use its platform default.
         },
       });
 

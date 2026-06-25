@@ -11,6 +11,7 @@ import { UpdateNotification } from "@/components/electron/UpdateNotification";
 import { SetupWizard } from "@/components/electron/SetupWizard";
 import { BackendStartup } from "@/components/electron/BackendStartup";
 import { FirstRunSetup } from "@/components/electron/FirstRunSetup";
+import { ChromiumBanner } from "@/components/electron/ChromiumBanner";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Login } from "@/pages/Login";
@@ -155,6 +156,7 @@ const App = () => {
           {(gate === 'ready' || gate === 'checking') && (
             <>
               <UpdateNotification />
+              <ChromiumBanner />
               <ElectronTitleBar />
               <AppRouter>
                 <ElectronNavigationHandler />

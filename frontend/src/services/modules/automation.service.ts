@@ -26,6 +26,9 @@ export const automationService = {
   completeCodegen: (sessionId: string) =>
     httpClient.post<AutomationScript>(`/automation/codegen/${sessionId}/complete`).then((r) => r.data),
 
+  saveCodegenDirect: (sessionId: string) =>
+    httpClient.post<AutomationScript>(`/automation/codegen/${sessionId}/save-direct`).then((r) => r.data),
+
   // ─── Script Generation ──────────────────────────────────────────────────
   generate: (data: {
     testCaseId: string; projectId: string; targetUrl?: string; browserType?: string;

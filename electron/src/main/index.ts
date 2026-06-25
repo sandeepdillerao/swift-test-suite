@@ -7,6 +7,7 @@ import { registerUpdaterHandlers, setupUpdater } from './updater'
 import { createAppMenu } from './app-menu'
 import { createWindow, getMainWindow } from './window-manager'
 import { startBackend, stopBackend } from './backend-manager'
+import { ensurePlaywrightBrowsers } from './playwright-setup'
 import { store } from './store'
 
 // ─── Single instance lock ────────────────────────────────────────────────────
@@ -56,6 +57,10 @@ if (!gotTheLock) {
         console.error('Backend failed to start:', err)
       }
     }
+
+    // Auto-install Chromium browsers if not present — runs in the background,
+    // no user action required. A banner in the renderer shows download progress.
+    ensurePlaywrightBrowsers()
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

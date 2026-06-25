@@ -86,11 +86,24 @@ export function setupUpdater(): void {
     }
   })
 
-  autoUpdater.on('error', (err: Error) => sendToRenderer('updater:error', err.message))
+  autoUpdater.on('error', (err: Error) => {
+    const msg = err.message
+    // Silently ignore expected failures: private repo without embedded token (404),
+    // or offline / DNS errors. Only surface unexpected errors to the renderer.
+    if (
+      msg.includes('404') ||
+      msg.includes('ENOTFOUND') ||
+      msg.includes('ECONNREFUSED') ||
+      msg.includes('net::ERR') ||
+      msg.includes('Cannot find latest') ||
+      msg.includes('HttpError')
+    ) return
+    sendToRenderer('updater:error', msg)
+  })
 
   // Auto-check 10 s after launch so it doesn't slow down startup
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => { /* silently ignore on no internet */ })
+    autoUpdater.checkForUpdates().catch(() => { /* silently ignore */ })
   }, 10_000)
 }
 

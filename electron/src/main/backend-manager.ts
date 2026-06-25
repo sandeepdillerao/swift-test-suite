@@ -82,16 +82,19 @@ function buildBackendEnv(): NodeJS.ProcessEnv {
     FRONTEND_URL: 'app://.',
     UPLOADS_DIR: uploadsDir,
 
-    // Playwright: tell the service where to look for the CLI binary and where to
-    // cache downloaded browsers. Users install Playwright into the userData dir:
-    //   cd "$(electron app userData)" && npm install @playwright/test && npx playwright install
-    PLAYWRIGHT_NODE_MODULES: join(app.getPath('userData'), 'node_modules'),
-    // Use platform-appropriate Playwright browser cache so it matches where
-    // `npx playwright install` puts binaries by default.
-    // macOS: ~/Library/Caches/ms-playwright  Linux/Windows: ~/.cache/ms-playwright
+    // Playwright npm packages are bundled as extraResources so the CLI runs
+    // via Electron's own Node runtime — no separate Node.js install required.
+    PLAYWRIGHT_NODE_MODULES: join(process.resourcesPath, 'playwright', 'node_modules'),
+    // Browser cache: use each platform's default so browsers installed via
+    // `npx playwright install chromium` are found automatically.
+    // macOS: ~/Library/Caches/ms-playwright
+    // Windows: %LOCALAPPDATA%\ms-playwright  (NOT ~/.cache — that's Linux only)
+    // Linux:  ~/.cache/ms-playwright
     PLAYWRIGHT_BROWSERS_PATH: process.platform === 'darwin'
       ? join(os.homedir(), 'Library', 'Caches', 'ms-playwright')
-      : join(os.homedir(), '.cache', 'ms-playwright'),
+      : process.platform === 'win32'
+        ? join(process.env['LOCALAPPDATA'] || os.homedir(), 'ms-playwright')
+        : join(os.homedir(), '.cache', 'ms-playwright'),
   }
 }
 

@@ -16,11 +16,30 @@
   ],
 
   // Include the bundled NestJS backend for local-mode operation
+  // Include playwright npm packages (CLI + core) so codegen and test execution work
+  // without the user needing to install Node.js or playwright globally.
+  // The Electron runtime (ELECTRON_RUN_AS_NODE=1) executes the playwright CLI JS directly.
+  // Browsers are NOT bundled — users install them separately via: npx playwright install chromium
   extraResources: [
     {
       from: "resources/backend",
       to: "backend",
       filter: ["**/*"],
+    },
+    {
+      from: "../node_modules/@playwright/test",
+      to: "playwright/node_modules/@playwright/test",
+      filter: ["**/*", "!**/*.map"],
+    },
+    {
+      from: "../node_modules/playwright",
+      to: "playwright/node_modules/playwright",
+      filter: ["**/*", "!**/*.map"],
+    },
+    {
+      from: "../node_modules/playwright-core",
+      to: "playwright/node_modules/playwright-core",
+      filter: ["**/*", "!**/*.map"],
     },
   ],
 
