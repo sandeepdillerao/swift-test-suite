@@ -42,6 +42,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -61,6 +62,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
 import { useScriptExecution } from '@/hooks/useAutomation';
 import { ExecutionResultsPanel } from '@/components/automation/ExecutionResultsPanel';
+import { generateTestRunPDF } from '@/utils/testRunPdf';
 import type { TestStatus, TestRunCase } from '@/types';
 
 const statusConfig: Record<TestStatus, { label: string; className: string; icon: typeof CheckCircle2 }> = {
@@ -90,6 +92,7 @@ export const TestRunDetail = () => {
   const { data: autoExecProgress } = useExecutionProgress(id, isRunExecuting);
 
   const [expandedCase, setExpandedCase] = useState<string | null>(null);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   // Fire a desktop notification when the run transitions to completed
   const prevStatusRef = useRef<string | undefined>();
@@ -257,6 +260,23 @@ export const TestRunDetail = () => {
     toast.success('CSV report exported successfully');
   };
 
+  const exportPDFReport = async () => {
+    if (pdfExporting) return;
+    setPdfExporting(true);
+    const toastId = toast.loading('Generating PDF report…');
+    try {
+      await generateTestRunPDF(testRun, users, {
+        onProgress: (msg) => toast.loading(msg, { id: toastId }),
+      });
+      toast.success('PDF report downloaded', { id: toastId });
+    } catch (err) {
+      toast.error('Failed to generate PDF report', { id: toastId });
+      console.error(err);
+    } finally {
+      setPdfExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -283,12 +303,17 @@ export const TestRunDetail = () => {
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Download className="h-4 w-4" />
+              <Button variant="outline" className="gap-2" disabled={pdfExporting}>
+                {pdfExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Export
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportPDFReport} disabled={pdfExporting}>
+                <FileText className="mr-2 h-4 w-4 text-red-500" />
+                Export PDF Report
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={exportReport}>
                 <FileText className="mr-2 h-4 w-4" />
                 Export JSON Report
