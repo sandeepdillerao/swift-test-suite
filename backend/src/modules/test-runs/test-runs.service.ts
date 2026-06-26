@@ -316,6 +316,7 @@ export class TestRunsService {
       testRunId: run.id,
       name: run.name,
       status: run.status,
+      projectId: run.projectId,
       environment: run.environmentConfig?.name || run.environment || null,
       buildNumber: run.buildNumber,
       startedAt: run.startedAt,
@@ -349,5 +350,43 @@ export class TestRunsService {
       defects,
       timeline,
     };
+  }
+
+  // ── CSV Export ─────────────────────────────────────────────────────────
+
+  async exportCsv(id: string): Promise<string> {
+    const run = await this.findById(id);
+    const cases = run.testCases || [];
+
+    const escape = (v: unknown) => {
+      const s = v == null ? '' : String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+
+    const headers = ['TC ID', 'Title', 'Priority', 'Type', 'Execution Mode', 'Status', 'Duration (ms)', 'Executed At', 'Actual Result', 'Comment', 'Defects'];
+    const rows = cases.map((c) => [
+      escape(c.testCase?.tcId ?? ''),
+      escape(c.testCase?.title ?? ''),
+      escape(c.testCase?.priority ?? ''),
+      escape(c.testCase?.type ?? ''),
+      escape(c.executionMode),
+      escape(c.status),
+      escape(c.duration ?? ''),
+      escape(c.executedAt ? new Date(c.executedAt).toISOString() : ''),
+      escape(c.actualResult ?? ''),
+      escape(c.comment ?? ''),
+      escape((c.defects ?? []).join('; ')),
+    ]);
+
+    const summary = [
+      `# Test Run: ${run.name}`,
+      `# Status: ${run.status}`,
+      `# Pass Rate: ${run.passRate}%`,
+      `# Total Cases: ${cases.length}`,
+      `# Exported: ${new Date().toISOString()}`,
+      '',
+    ].join('\n');
+
+    return summary + [headers, ...rows].map((r) => r.join(',')).join('\n');
   }
 }

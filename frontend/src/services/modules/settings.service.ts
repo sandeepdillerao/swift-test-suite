@@ -1,4 +1,5 @@
 import { httpClient } from '../http-client';
+import type { PlaywrightConfig } from '@/types';
 
 export interface NotificationSettings {
   email: boolean;
@@ -11,6 +12,7 @@ export interface AISettings {
   activeProvider: string;
   activeModel: string;
   enabledProviders?: Record<string, boolean>;
+  autoHealer?: boolean;
 }
 
 export interface OrganizationSettings {
@@ -27,6 +29,7 @@ export interface ApiKeyStatus {
 export interface AllSettings {
   notifications: NotificationSettings;
   ai: AISettings;
+  playwrightConfig: PlaywrightConfig;
   organization: {
     name: string;
     website?: string;
@@ -44,6 +47,9 @@ export const settingsService = {
 
   updateAi: (data: Partial<AISettings>) =>
     httpClient.patch<AISettings>('/settings/ai', data).then((r) => r.data),
+
+  updatePlaywrightConfig: (data: Partial<PlaywrightConfig>) =>
+    httpClient.patch<PlaywrightConfig>('/settings/playwright', data).then((r) => r.data),
 
   updateOrganization: (data: OrganizationSettings) =>
     httpClient.patch<{ message: string }>('/settings/organization', data).then((r) => r.data),

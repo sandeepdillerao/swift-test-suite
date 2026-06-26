@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
@@ -64,6 +65,17 @@ export class TestRunsController {
   @ApiOperation({ summary: 'Delete test run (soft)' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.remove(id);
+  }
+
+  // ── CSV Export ─────────────────────────────────────────────────────────
+
+  @Get(':id/export/csv')
+  @ApiOperation({ summary: 'Download test run results as CSV' })
+  async exportCsv(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
+    const csv = await this.service.exportCsv(id);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="test-run-${id}.csv"`);
+    res.send(csv);
   }
 
   // ── History ────────────────────────────────────────────────────────────

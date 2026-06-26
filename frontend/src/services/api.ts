@@ -104,6 +104,7 @@ export const api = {
     getAll: () => settingsService.getAll(),
     updateNotifications: settingsService.updateNotifications,
     updateAi: settingsService.updateAi,
+    updatePlaywrightConfig: settingsService.updatePlaywrightConfig,
     updateOrganization: settingsService.updateOrganization,
     getApiKeys: () => settingsService.getApiKeys(),
     setApiKey: (provider: string, key: string) => settingsService.setApiKey(provider, key),
@@ -134,6 +135,9 @@ export const api = {
     getCodegenStatus: automationService.getCodegenStatus,
     stopCodegen: automationService.stopCodegen,
     completeCodegen: automationService.completeCodegen,
+    saveCodegenDirect: automationService.saveCodegenDirect,
+    // Suite generation from recording
+    generateSuiteFromRecording: automationService.generateSuiteFromRecording,
     // Script generation
     generate: automationService.generate,
     importCodegen: automationService.importCodegen,

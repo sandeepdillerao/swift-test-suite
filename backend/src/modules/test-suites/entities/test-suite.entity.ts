@@ -10,6 +10,7 @@ export class TestSuite {
   @Column({ type: 'uuid' }) createdBy: string;
   @Column({ type: 'varchar', length: 255 }) name: string;
   @Column({ type: 'text', nullable: true }) description: string | null;
+  @Column({ type: 'jsonb', default: '{}' }) variables: Record<string, string>;
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;
   @DeleteDateColumn() deletedAt: Date | null;

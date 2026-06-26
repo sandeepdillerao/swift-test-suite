@@ -21,6 +21,7 @@ export class TestCasesService {
       assignedTo: dto.assignedTo ?? null,
       steps: dto.steps ?? [],
       tags: dto.tags ?? [],
+      variables: dto.variables ?? {},
       priority: dto.priority ?? Priority.MEDIUM,
       type: dto.type ?? TestType.MANUAL,
       status: TestStatus.NOT_RUN,

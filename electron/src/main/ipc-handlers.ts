@@ -199,6 +199,18 @@ export function setupIpcHandlers(): void {
     notif.show()
   })
 
+  // ─── Storage path ─────────────────────────────────────────────────────────
+
+  ipcMain.handle('app:get-storage-path', () => {
+    return path.join(app.getPath('userData'), 'uploads')
+  })
+
+  ipcMain.handle('app:open-storage-folder', async () => {
+    const dir = path.join(app.getPath('userData'), 'uploads')
+    fs.mkdirSync(dir, { recursive: true })
+    return shell.openPath(dir)
+  })
+
   // ─── Secure storage ──────────────────────────────────────────────────────
 
   ipcMain.handle('secure:get', (_event, key: string): string | null => {

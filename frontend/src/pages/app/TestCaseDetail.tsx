@@ -28,6 +28,7 @@ import { useTestSuites } from '@/hooks/useTestSuites';
 import { useProjectStore } from '@/stores/projectStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { CanShow } from '@/components/auth/PermissionGuard';
+import { VariablesEditor } from '@/components/common/VariablesEditor';
 import { formatDistanceToNow, format } from 'date-fns';
 import { toast } from 'sonner';
 import type { TestCase } from '@/types';
@@ -53,6 +54,7 @@ export const TestCaseDetail = () => {
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { can } = usePermissions();
 
   if (isLoading) {
     return (
@@ -222,6 +224,26 @@ export const TestCaseDetail = () => {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Variables Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Variables</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <VariablesEditor
+                value={testCase.variables ?? {}}
+                onChange={(vars) => {
+                  updateTestCase.mutate(
+                    { id: testCase.id, data: { variables: vars } as any },
+                    { onSuccess: () => toast.success('Variables saved'), onError: () => toast.error('Failed to save variables') },
+                  );
+                }}
+                description="Override variables for this test case. Takes precedence over suite-level."
+                readOnly={!can('test_cases:update')}
+              />
+            </CardContent>
+          </Card>
+
           {/* Details Card */}
           <Card>
             <CardHeader>

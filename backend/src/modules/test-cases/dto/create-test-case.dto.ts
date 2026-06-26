@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Length, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { Priority, TestType } from '../entities/test-case.enums';
@@ -24,4 +24,5 @@ export class CreateTestCaseDto {
   @ApiPropertyOptional() @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @ApiPropertyOptional() @IsOptional() @IsString() jiraTicketId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() jiraTicketUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsObject() variables?: Record<string, string>;
 }

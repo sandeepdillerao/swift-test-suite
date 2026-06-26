@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   Play, Sparkles, Upload, Code2, Clock, CheckCircle2, XCircle,
@@ -29,6 +29,7 @@ import {
   useCompleteCodegen, useSaveCodegenDirect,
 } from '@/hooks/useAutomation';
 import { useEnvironments } from '@/hooks/useEnvironments';
+import { useAIConfigStore } from '@/stores/aiConfigStore';
 import type { ProjectEnvironment } from '@/types';
 import type { AutomationScript, ScriptExecution, BrowserType, StructuredLogs } from '@/types';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -115,6 +116,7 @@ function MonacoEditorShell({
   readOnly = false,
   allowFullscreen = true,
   language = 'typescript',
+  onEditorMount,
 }: {
   value: string;
   onChange?: (value: string) => void;
@@ -122,6 +124,7 @@ function MonacoEditorShell({
   readOnly?: boolean;
   allowFullscreen?: boolean;
   language?: string;
+  onEditorMount?: (editor: any) => void;
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -190,6 +193,7 @@ function MonacoEditorShell({
               value={value || (readOnly ? '// No script content' : '')}
               theme="vs-dark"
               onChange={readOnly ? undefined : (v) => onChange?.(v || '')}
+              onMount={onEditorMount}
               options={{ ...options, minimap: { enabled: true } }}
               loading={editorLoading}
             />
@@ -222,6 +226,7 @@ function MonacoEditorShell({
         value={value || (readOnly ? '// No script content' : '')}
         theme="vs-dark"
         onChange={readOnly ? undefined : (v) => onChange?.(v || '')}
+        onMount={onEditorMount}
         options={options}
         loading={editorLoading}
       />
@@ -231,24 +236,26 @@ function MonacoEditorShell({
 
 // ─── Monaco Code Viewer (read-only) ─────────────────────────────────────────
 
-function CodeViewer({ value, height = '400px', allowFullscreen = true }: { value: string; height?: string; allowFullscreen?: boolean }) {
+export function CodeViewer({ value, height = '400px', allowFullscreen = true }: { value: string; height?: string; allowFullscreen?: boolean }) {
   return <MonacoEditorShell value={value} height={height} readOnly allowFullscreen={allowFullscreen} />;
 }
 
 // ─── Monaco Code Editor (editable) ──────────────────────────────────────────
 
-function CodeEditor({
+export function CodeEditor({
   value,
   onChange,
   height = '450px',
   allowFullscreen = true,
+  onEditorMount,
 }: {
   value: string;
   onChange: (value: string) => void;
   height?: string;
   allowFullscreen?: boolean;
+  onEditorMount?: (editor: any) => void;
 }) {
-  return <MonacoEditorShell value={value} onChange={onChange} height={height} allowFullscreen={allowFullscreen} />;
+  return <MonacoEditorShell value={value} onChange={onChange} height={height} allowFullscreen={allowFullscreen} onEditorMount={onEditorMount} />;
 }
 
 // ─── Browser Select (reusable) ──────────────────────────────────────────────
@@ -298,6 +305,7 @@ function UrlBrowserConfig({
 export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: AutomationPanelProps) => {
   const { data: scripts = [], isLoading } = useAutomationScripts(testCaseId);
   const { data: environments = [] } = useEnvironments(projectId);
+  const { autoHealer } = useAIConfigStore();
   const generateScript = useGenerateScript();
   const updateScript = useUpdateScript();
   const deleteScript = useDeleteScript();
@@ -425,26 +433,22 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
   }, [generateScript, testCaseId, projectId, targetUrl, browserType, codegenScript, selectedEnv]);
 
   const handleExecute = useCallback((script: AutomationScript, headless: boolean) => {
-    // Build merged variables: env vars + auth config constants
-    const mergedVars: Record<string, string> = { ...(selectedEnv?.variables || {}) };
-    if (selectedEnv?.authConfigs) {
-      for (const auth of selectedEnv.authConfigs) {
-        const prefix = auth.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        mergedVars[`${prefix}_USERNAME`] = auth.username;
-        mergedVars[`${prefix}_PASSWORD`] = auth.password;
-        if (auth.role) mergedVars[`${prefix}_ROLE`] = auth.role;
-      }
-    }
-    const hasVars = Object.keys(mergedVars).length > 0;
+    // Auth config passwords are masked on the frontend — pass environmentId so the backend
+    // resolves credentials server-side with decrypted passwords.
+    // Non-sensitive environment variables are passed directly for convenience.
+    const plainVars = selectedEnv?.variables && Object.keys(selectedEnv.variables).length > 0
+      ? selectedEnv.variables
+      : undefined;
 
     executeScript.mutate(
       {
         scriptId: script.id,
         options: {
-          enableHealing: true,
+          enableHealing: autoHealer,
           headless,
           targetUrl: selectedEnv?.baseUrl || undefined,
-          ...(hasVars ? { variables: mergedVars } : {}),
+          ...(selectedEnvId ? { environmentId: selectedEnvId } : {}),
+          ...(plainVars ? { variables: plainVars } : {}),
         },
       },
       {
@@ -452,7 +456,7 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
         onError: (err: any) => toast.error(err.message || 'Failed to start execution'),
       },
     );
-  }, [executeScript, selectedEnv]);
+  }, [executeScript, selectedEnv, selectedEnvId, autoHealer]);
 
   const handleCancel = useCallback((executionId: string) => {
     cancelExecution.mutate(executionId, {
@@ -521,6 +525,7 @@ export const AutomationPanel = ({ testCaseId, projectId, testCaseHasSteps }: Aut
             {activeScript && (
               <ScriptDetail
                 script={activeScript}
+                selectedEnv={selectedEnv}
                 onExecute={(headless) => handleExecute(activeScript, headless)}
                 onCancel={handleCancel}
                 onDelete={() => handleDelete(activeScript)}
@@ -1113,9 +1118,10 @@ function ChromiumInstallPanel({ onDone }: { onDone: () => void }) {
 // ─── Script Detail ───────────────────────────────────────────────────────────
 
 function ScriptDetail({
-  script, onExecute, onCancel, onDelete, onUpdate, isExecuting, isCancelling,
+  script, selectedEnv, onExecute, onCancel, onDelete, onUpdate, isExecuting, isCancelling,
 }: {
   script: AutomationScript;
+  selectedEnv?: ProjectEnvironment;
   onExecute: (headless: boolean) => void;
   onCancel: (executionId: string) => void;
   onDelete: () => void;
@@ -1126,7 +1132,19 @@ function ScriptDetail({
   const [editMode, setEditMode] = useState(false);
   const [editedScript, setEditedScript] = useState(script.activeScript || '');
   const [headless, setHeadless] = useState(true);
+  const editorRef = useRef<any>(null);
   const { data: executions = [] } = useScriptExecutions(script.id);
+
+  const handleInsertVariable = useCallback((name: string) => {
+    const editor = editorRef.current;
+    if (editor) {
+      const selection = editor.getSelection();
+      editor.executeEdits('variable-picker', [{ range: selection, text: name, forceMoveMarkers: true }]);
+      editor.focus();
+    } else {
+      setEditedScript((prev) => prev + name);
+    }
+  }, []);
 
   const cfg = getStatusConfig(script.status);
   const StatusIcon = cfg.icon;
@@ -1217,8 +1235,11 @@ function ScriptDetail({
           </div>
         </div>
 
+        {editMode && selectedEnv && (
+          <VariablePicker environment={selectedEnv} onInsert={handleInsertVariable} />
+        )}
         {editMode ? (
-          <CodeEditor value={editedScript} onChange={setEditedScript} height="450px" />
+          <CodeEditor value={editedScript} onChange={setEditedScript} height="420px" onEditorMount={(e) => { editorRef.current = e; }} />
         ) : (
           <CodeViewer value={script.activeScript || ''} height="450px" />
         )}
@@ -1247,6 +1268,59 @@ function ScriptDetail({
         </div>
       </TabsContent>
     </Tabs>
+  );
+}
+
+// ─── Variable Picker ─────────────────────────────────────────────────────────
+
+function VariablePicker({ environment, onInsert }: { environment: ProjectEnvironment; onInsert: (name: string) => void }) {
+  const varEntries = Object.entries(environment.variables || {});
+  const authEntries: Array<{ name: string; label: string; masked: boolean }> = [];
+  for (const auth of environment.authConfigs || []) {
+    const prefix = auth.label.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    authEntries.push({ name: `${prefix}_USERNAME`, label: auth.username, masked: false });
+    authEntries.push({ name: `${prefix}_PASSWORD`, label: '••••••••', masked: true });
+    if (auth.role) authEntries.push({ name: `${prefix}_ROLE`, label: auth.role, masked: false });
+  }
+
+  if (varEntries.length === 0 && authEntries.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-dashed border-blue-200 dark:border-blue-800 bg-blue-50/30 dark:bg-blue-950/10 p-2.5">
+      <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400 mb-2 flex items-center gap-1.5">
+        <Variable className="h-3 w-3" /> Variable Picker — click to append at cursor
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {varEntries.map(([key, value]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onInsert(key)}
+            title={`Value: ${value}`}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono bg-white dark:bg-zinc-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 hover:border-blue-400 transition-colors"
+          >
+            {key}
+            <span className="text-[10px] text-muted-foreground ml-0.5 max-w-[60px] truncate">{value}</span>
+          </button>
+        ))}
+        {authEntries.map(({ name, label, masked }) => (
+          <button
+            key={name}
+            type="button"
+            onClick={() => onInsert(name)}
+            title={masked ? 'Auth password — resolved at runtime' : `Value: ${label}`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono border transition-colors ${
+              masked
+                ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/40'
+                : 'bg-white dark:bg-zinc-800 border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+            }`}
+          >
+            {name}
+            <span className="text-[10px] text-muted-foreground ml-0.5">{masked ? '🔒' : label.length > 10 ? label.slice(0, 10) + '…' : label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

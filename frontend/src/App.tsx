@@ -20,6 +20,7 @@ import { TestCases } from "@/pages/app/TestCases";
 import { TestCaseDetail } from "@/pages/app/TestCaseDetail";
 import { TestSuites } from "@/pages/app/TestSuites";
 import { TestSuiteDetail } from "@/pages/app/TestSuiteDetail";
+import { GenerateFromRecording } from "@/pages/app/GenerateFromRecording";
 import { TestRuns } from "@/pages/app/TestRuns";
 import { TestRunDetail } from "@/pages/app/TestRunDetail";
 import { Releases } from "@/pages/app/Releases";
@@ -171,6 +172,7 @@ const App = () => {
                       <Route path="test-cases" element={<TestCases />} />
                       <Route path="test-cases/:id" element={<TestCaseDetail />} />
                       <Route path="test-suites" element={<TestSuites />} />
+                      <Route path="test-suites/generate-from-recording" element={<GenerateFromRecording />} />
                       <Route path="test-suites/:id" element={<TestSuiteDetail />} />
                       <Route path="test-runs" element={<TestRuns />} />
                       <Route path="test-runs/:id" element={<TestRunDetail />} />

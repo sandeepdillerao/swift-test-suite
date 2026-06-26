@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -90,6 +90,23 @@ export const TestRunDetail = () => {
   const { data: autoExecProgress } = useExecutionProgress(id, isRunExecuting);
 
   const [expandedCase, setExpandedCase] = useState<string | null>(null);
+
+  // Fire a desktop notification when the run transitions to completed
+  const prevStatusRef = useRef<string | undefined>();
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const curr = testRun?.status;
+    if (prev && prev !== 'completed' && curr === 'completed' && testRun) {
+      const passRate = testRun.passRate ?? 0;
+      const p = testRun.testCases.filter((tc) => tc.status === 'passed').length;
+      const t = testRun.testCases.length;
+      window.electron?.showNotification(
+        `Test Run Finished: ${testRun.name}`,
+        `${p}/${t} passed · ${passRate}% pass rate`,
+      );
+    }
+    prevStatusRef.current = curr;
+  }, [testRun?.status]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   if (isLoading) {

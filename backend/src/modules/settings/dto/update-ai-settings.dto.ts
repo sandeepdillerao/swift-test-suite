@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsObject, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsObject, IsBoolean, IsIn } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -16,4 +16,10 @@ export class UpdateAiSettingsDto {
   @IsObject()
   @Type(() => EnabledProvidersDto)
   enabledProviders?: EnabledProvidersDto;
+
+  @ApiPropertyOptional({ description: 'Auto-heal failed Playwright scripts using AI. Off by default.' })
+  @IsOptional() @IsBoolean() autoHealer?: boolean;
+
+  @ApiPropertyOptional({ description: 'When to capture screenshots/video/trace', enum: ['always', 'on-failure', 'never'] })
+  @IsOptional() @IsIn(['always', 'on-failure', 'never']) captureArtifacts?: 'always' | 'on-failure' | 'never';
 }

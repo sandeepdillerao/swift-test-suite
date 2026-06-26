@@ -12,20 +12,25 @@ import { AutomationScript } from './entities/automation-script.entity';
 import { ScriptExecution } from './entities/script-execution.entity';
 import { ScriptStatus, ExecutionStatus, BrowserType, ScriptSource } from './entities/automation.enums';
 import { TestCase } from '@/modules/test-cases/entities/test-case.entity';
-import { TestStatus, TestType } from '@/modules/test-cases/entities/test-case.enums';
+import { Priority, TestStatus, TestType } from '@/modules/test-cases/entities/test-case.enums';
+import { TestSuite } from '@/modules/test-suites/entities/test-suite.entity';
 import { User } from '@/modules/users/entities/user.entity';
+import { Project } from '@/modules/projects/entities/project.entity';
 import { SettingsService, AiProvider } from '@/modules/settings/settings.service';
+import { EnvironmentsService } from '@/modules/projects/environments.service';
+import { PLAYWRIGHT_CONFIG_DEFAULTS } from '@/modules/settings/dto/update-playwright-config.dto';
 import { AiAuditService } from '@/common/modules/ai-audit';
 import { GenerateScriptDto, ImportCodegenScriptDto } from './dto/generate-script.dto';
 import { UpdateScriptDto } from './dto/update-script.dto';
 import { ExecuteScriptDto } from './dto/execute-script.dto';
 import { StartCodegenDto } from './dto/codegen-session.dto';
+import { GenerateSuiteFromRecordingDto } from './dto/generate-suite-from-recording.dto';
 
 /** Codegen session tracked in memory */
 interface CodegenSession {
   id: string;
   userId: string;
-  testCaseId: string;
+  testCaseId?: string;
   projectId: string;
   targetUrl?: string;
   browserType: BrowserType;
@@ -164,8 +169,11 @@ export class AutomationService {
     @InjectRepository(AutomationScript) private readonly scriptRepo: Repository<AutomationScript>,
     @InjectRepository(ScriptExecution) private readonly executionRepo: Repository<ScriptExecution>,
     @InjectRepository(TestCase) private readonly testCaseRepo: Repository<TestCase>,
+    @InjectRepository(TestSuite) private readonly testSuiteRepo: Repository<TestSuite>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
+    @InjectRepository(Project) private readonly projectRepo: Repository<Project>,
     private readonly settingsService: SettingsService,
+    private readonly environmentsService: EnvironmentsService,
     private readonly httpService: HttpService,
     private readonly aiAuditService: AiAuditService,
   ) {
@@ -182,8 +190,10 @@ export class AutomationService {
       );
     }
 
-    const testCase = await this.testCaseRepo.findOne({ where: { id: dto.testCaseId } });
-    if (!testCase) throw new NotFoundException('Test case not found');
+    if (dto.testCaseId) {
+      const testCase = await this.testCaseRepo.findOne({ where: { id: dto.testCaseId } });
+      if (!testCase) throw new NotFoundException('Test case not found');
+    }
 
     const sessionId = uuidv4();
     const outputFile = path.join(os.tmpdir(), `codegen-${sessionId}.ts`);
@@ -327,6 +337,7 @@ export class AutomationService {
       throw new BadRequestException('No codegen recording found. Record some actions first.');
     }
 
+    if (!session.testCaseId) throw new BadRequestException('This session is not linked to a test case');
     const result = await this.generateScript(userId, {
       testCaseId: session.testCaseId,
       projectId: session.projectId,
@@ -455,7 +466,10 @@ export class AutomationService {
       rawScript: dto.rawScript,
       cleanScript,
       healedScript: null,
-      activeScript: cleanScript,
+      // activeScript always starts as the raw recording — the AI-cleaned version
+      // goes into cleanScript only; the user can promote it from the UI if desired.
+      // This prevents AI selector hallucinations from breaking execution immediately.
+      activeScript: dto.rawScript,
       targetUrl: dto.targetUrl || null,
       status: ScriptStatus.READY,
       source: ScriptSource.CODEGEN,
@@ -495,8 +509,17 @@ export class AutomationService {
 
     await this.scriptRepo.update(script.id, { status: ScriptStatus.RUNNING });
 
+    // Resolve playwright config: user settings → project override → execution-level override
+    const userSettings = await this.settingsService.getAll(userId);
+    const userPwConfig = userSettings.playwrightConfig ?? PLAYWRIGHT_CONFIG_DEFAULTS;
+    const project = script.projectId
+      ? await this.projectRepo.findOne({ where: { id: script.projectId } })
+      : null;
+    const projectPwOverride = (project?.settings as any)?.playwrightConfig ?? {};
+    const resolvedPwConfig = { ...PLAYWRIGHT_CONFIG_DEFAULTS, ...userPwConfig, ...projectPwOverride };
+
     // Run async — don't block the response
-    this.runPlaywright(script, savedExecution, dto).catch((err) => {
+    this.runPlaywright(script, savedExecution, dto, resolvedPwConfig).catch((err) => {
       this.logger.error(`Playwright execution error: ${err.message}`);
     });
 
@@ -507,6 +530,7 @@ export class AutomationService {
     script: AutomationScript,
     execution: ScriptExecution,
     dto: ExecuteScriptDto,
+    pwConfig: typeof PLAYWRIGHT_CONFIG_DEFAULTS,
   ): Promise<void> {
     const startTime = Date.now();
     const tmpDir = path.join(os.tmpdir(), `pw-${execution.id}`);
@@ -521,15 +545,64 @@ export class AutomationService {
       fs.mkdirSync(tmpDir, { recursive: true });
       fs.mkdirSync(artifactDir, { recursive: true });
 
-      // Inject target URL override if provided
       let scriptContent = execution.scriptSnapshot!;
-      const targetUrl = dto.targetUrl || script.targetUrl;
-      if (targetUrl) {
-        scriptContent = `// Target URL: ${targetUrl}\n${scriptContent}`;
+      const explicitTargetUrl = dto.targetUrl || script.targetUrl;
+
+      // Auto-extract a base URL from rawScript when no targetUrl is given.
+      // This makes AI-generated scripts (which use relative paths like /login) work
+      // even when the user runs without selecting an environment.
+      let extractedBase: string | null = null;
+      if (!explicitTargetUrl && script.rawScript) {
+        const m = script.rawScript.match(/page\.goto\(\s*['"`](https?:\/\/[^/'"`\s]+)/);
+        if (m) {
+          try { extractedBase = new URL(m[1]).origin; } catch { /* ignore */ }
+        }
       }
 
-      // Inject environment variables as constants at the top of the script
-      const envVars = dto.variables || {};
+      const targetUrl = explicitTargetUrl || null;
+      const configBaseUrl = explicitTargetUrl || extractedBase;
+
+      // When an explicit targetUrl is given, rewrite absolute URLs in the script to point there
+      if (explicitTargetUrl) {
+        try {
+          const targetBase = new URL(explicitTargetUrl);
+          scriptContent = scriptContent.replace(
+            /page\.goto\(\s*['"`]([^'"`]+)['"`]/g,
+            (match: string, recordedUrl: string) => {
+              try {
+                const parsed = new URL(recordedUrl);
+                parsed.protocol = targetBase.protocol;
+                parsed.host = targetBase.host;
+                return match.replace(recordedUrl, parsed.toString());
+              } catch {
+                return match; // relative URL — leave it; baseURL in config handles it
+              }
+            },
+          );
+        } catch {
+          // invalid targetUrl — keep script as-is
+        }
+      }
+
+      // Resolve environment variables — auth passwords must come from server-side decryption
+      const envVars: Record<string, string> = { ...(dto.variables || {}) };
+      if (dto.environmentId) {
+        try {
+          const rawEnv = await this.environmentsService.findByIdWithCredentials(dto.environmentId);
+          // Environment-level variables take precedence over passed vars
+          Object.assign(envVars, rawEnv.variables || {});
+          // Auth config credentials — passwords are now decrypted
+          for (const auth of rawEnv.authConfigs || []) {
+            const prefix = (auth.label || 'AUTH').toUpperCase().replace(/[^A-Z0-9]/g, '_');
+            envVars[`${prefix}_USERNAME`] = auth.username;
+            envVars[`${prefix}_PASSWORD`] = auth.password; // real decrypted password
+            if (auth.role) envVars[`${prefix}_ROLE`] = auth.role;
+          }
+        } catch (e) {
+          this.logger.warn(`Could not resolve environment credentials for ${dto.environmentId}: ${e.message}`);
+        }
+      }
+
       if (Object.keys(envVars).length > 0) {
         const varLines = Object.entries(envVars)
           .map(([key, value]) => `const ${key} = ${JSON.stringify(value)};`)
@@ -537,10 +610,28 @@ export class AutomationService {
         scriptContent = `// ── Environment Variables ──\n${varLines}\n\n${scriptContent}`;
       }
 
-      // Write playwright config — always record video + screenshots
+      // Write playwright config — merge resolved config with per-run overrides
       const configPath = path.join(tmpDir, 'playwright.config.ts');
-      const headless = dto.headless !== false;
-      const browser = dto.browserType || script.browserType || 'chromium';
+      const headless = dto.headless !== undefined ? dto.headless : pwConfig.defaultHeadless;
+      const browser = dto.browserType || script.browserType || pwConfig.defaultBrowser || 'chromium';
+
+      const toCapture = (mode: string) =>
+        mode === 'always' ? 'on' : mode === 'never' ? 'off' : 'retain-on-failure';
+      const screenshotMode = toCapture(pwConfig.screenshot);
+      const videoMode = toCapture(pwConfig.video);
+      const traceMode = toCapture(pwConfig.trace);
+
+      const viewportConfig = pwConfig.viewportWidth && pwConfig.viewportHeight
+        ? `viewport: { width: ${pwConfig.viewportWidth}, height: ${pwConfig.viewportHeight} },`
+        : '';
+      const actionTimeoutConfig = pwConfig.actionTimeout > 0
+        ? `actionTimeout: ${pwConfig.actionTimeout},`
+        : '';
+      const navigationTimeoutConfig = pwConfig.navigationTimeout > 0
+        ? `navigationTimeout: ${pwConfig.navigationTimeout},`
+        : '';
+      const slowMoConfig = pwConfig.slowMo > 0 ? `slowMo: ${pwConfig.slowMo},` : '';
+      const httpsConfig = pwConfig.ignoreHttpsErrors ? `ignoreHTTPSErrors: true,` : '';
 
       // Build process.env assignments for environment variables
       const envAssignments = Object.entries(envVars)
@@ -553,16 +644,22 @@ export class AutomationService {
 ${envAssignments ? `\n// Inject environment variables\n${envAssignments}\n` : ''}
 module.exports = defineConfig({
   testDir: '.',
-  timeout: 60000,
-  retries: 0,
+  timeout: ${pwConfig.testTimeout || 120000},
+  retries: ${pwConfig.retries ?? 0},
+  workers: ${pwConfig.workers || 1},
   reporter: [['json', { outputFile: '${resultsJsonPath.replace(/\\/g, '/')}' }]],
   outputDir: '${testResultsDir.replace(/\\/g, '/')}',
   use: {
     headless: ${headless},
-    screenshot: 'on',
-    video: 'on',
-    trace: 'on',
-    ${targetUrl ? `baseURL: '${targetUrl}',` : ''}
+    screenshot: '${screenshotMode}',
+    video: '${videoMode}',
+    trace: '${traceMode}',
+    ${viewportConfig}
+    ${actionTimeoutConfig}
+    ${navigationTimeoutConfig}
+    ${slowMoConfig}
+    ${httpsConfig}
+    ${configBaseUrl ? `baseURL: '${configBaseUrl}',` : ''}
   },
   projects: [{ name: '${browser}', use: { browserName: '${browser}' } }],
 });
@@ -686,7 +783,11 @@ module.exports = defineConfig({
   }
 
   /** Build structured, human-readable log object from raw output */
-  private buildStructuredLogs(stdout: string, stderr: string, resultJson: any, passed: boolean, durationMs: number) {
+  private buildStructuredLogs(stdout: string, rawStderr: string, resultJson: any, passed: boolean, durationMs: number) {
+    // Strip Node.js deprecation warnings and their hint lines — noise unrelated to test outcomes
+    const stderr = rawStderr.split('\n')
+      .filter(line => !/\[DEP\d+\]|DeprecationWarning|--trace-deprecation/.test(line))
+      .join('\n');
     const summary = {
       passed,
       duration: `${(durationMs / 1000).toFixed(1)}s`,
@@ -725,20 +826,28 @@ module.exports = defineConfig({
             else if (testFailed) summary.failedTests++;
             else summary.skippedTests++;
 
-            // Extract step-level actions from the result
-            const actions: Array<{ title: string; status: 'passed' | 'failed'; duration: string; error?: string }> = [];
-            const extractSteps = (resultSteps: any[]) => {
+            // Extract step-level actions — flatten all Playwright API calls with pass/fail
+            const actions: Array<{ title: string; category: string; status: 'passed' | 'failed'; duration: string; error?: string }> = [];
+            const extractSteps = (resultSteps: any[], depth = 0) => {
               for (const s of resultSteps || []) {
-                // Skip internal/framework steps, show user-facing ones
-                if (s.category === 'hook' || s.category === 'fixture') continue;
+                const category = s.category || 'test';
+                // Skip internal Playwright setup/teardown hooks
+                if (category === 'hook' && depth === 0) continue;
+
+                const title = s.title || 'Unknown action';
+                const hasError = !!s.error;
                 actions.push({
-                  title: s.title || 'Unknown action',
-                  status: s.error ? 'failed' : 'passed',
-                  duration: `${((s.duration || 0) / 1000).toFixed(2)}s`,
+                  title,
+                  category,
+                  status: hasError ? 'failed' : 'passed',
+                  duration: s.duration != null ? `${(s.duration / 1000).toFixed(2)}s` : '',
                   error: s.error?.message ? this.stripAnsi(s.error.message) : undefined,
                 });
-                // Include nested steps (test.step() inside test.step())
-                if (s.steps?.length) extractSteps(s.steps);
+
+                // Only recurse into named test.step() groups — skip deep pw:api internals to avoid noise
+                if (s.steps?.length && depth < 2 && (category === 'test' || s.steps.some((c: any) => c.category !== 'pw:api'))) {
+                  extractSteps(s.steps, depth + 1);
+                }
               }
             };
             extractSteps(result.steps);
@@ -798,7 +907,7 @@ module.exports = defineConfig({
       const proc = spawn(runner.executable, testArgs, {
         cwd,
         shell: runner.shell,
-        timeout: 120000,
+        timeout: 300000,
         env: {
           ...process.env,
           ...runner.extraEnv,
@@ -1104,7 +1213,7 @@ ${codegenScript}
 5. **Remove codegen bloat** — remove page.waitForTimeout(), unnecessary navigations, duplicate actions
 6. **Add waitFor conditions** — replace hard waits with proper element waits (waitForSelector, expect().toBeVisible())
 7. **Error handling** — add try/catch for flaky parts, meaningful error messages
-8. **Navigation** — baseURL is configured in playwright.config, so use relative paths: \`page.goto('/')\`, \`page.goto('/dashboard')\`. NEVER hardcode full URLs.
+8. **Navigation** — ALWAYS use the FULL absolute URL from the codegen recording in every page.goto() call. NEVER convert to relative paths. Keep exactly what the recording had (e.g., \`page.goto('http://localhost:5173/login')\`). Relative paths will break execution.
 ${this.buildEnvironmentContext(variables, authConfigs, targetUrl)}
 
 Return ONLY the Playwright TypeScript code. No explanations, no markdown fences.`;
@@ -1143,7 +1252,7 @@ ${testCase.expectedResult || 'N/A'}
 5. Add meaningful test.describe and test() blocks
 6. Use async/await properly
 7. Add reasonable timeouts and waitFor conditions where needed
-8. **Navigation** — baseURL is configured in playwright.config, so use relative paths: \`page.goto('/')\`, \`page.goto('/dashboard')\`. NEVER hardcode full URLs.
+8. **Navigation** — ${targetUrl ? `Use '${targetUrl}' as the base for all page.goto() calls (e.g., \`page.goto('${targetUrl}/login')\`).` : `Use full absolute URLs in every page.goto() call. NEVER use relative paths like '/login' — they will fail without a baseURL configured.`}
 9. Include comments mapping each code section back to the test step
 ${this.buildEnvironmentContext(variables, authConfigs, targetUrl)}
 
@@ -1234,6 +1343,166 @@ Return ONLY the fixed Playwright TypeScript code. No explanations, no markdown f
     );
     const meta = response.data.usageMetadata;
     return { content: response.data.candidates[0].content.parts[0].text, inputTokens: meta?.promptTokenCount ?? 0, outputTokens: meta?.candidatesTokenCount ?? 0 };
+  }
+
+  // ─── Record-to-TestSuite AI Generation ──────────────────────────────────────
+
+  async generateSuiteFromRecording(userId: string, dto: GenerateSuiteFromRecordingDto) {
+    const { provider, model, apiKey } = await this.getAiCredentials(userId);
+    const orgId = await this.getOrgId(userId);
+    const prompt = this.buildSuiteFromRecordingPrompt(dto.recordedScript, dto.flowDescription, dto.suiteName);
+    const startTime = Date.now();
+    let aiResult: { content: string; inputTokens: number; outputTokens: number };
+    try {
+      aiResult = await this.callAiProvider(provider, model, apiKey, prompt);
+    } catch (err: any) {
+      this.aiAuditService.log({ userId, orgId, feature: 'automation', action: 'generate_suite_from_recording', provider, model, inputTokens: 0, outputTokens: 0, responseTimeMs: Date.now() - startTime, success: false, errorMessage: err.message, metadata: { projectId: dto.projectId } });
+      throw err;
+    }
+    this.aiAuditService.log({ userId, orgId, feature: 'automation', action: 'generate_suite_from_recording', provider, model, inputTokens: aiResult.inputTokens, outputTokens: aiResult.outputTokens, responseTimeMs: Date.now() - startTime, success: true, metadata: { projectId: dto.projectId } });
+
+    const testCaseData = this.extractJsonArray(aiResult.content);
+
+    // Create or reuse suite
+    let suite: TestSuite;
+    if (dto.targetSuiteId) {
+      const existing = await this.testSuiteRepo.findOne({ where: { id: dto.targetSuiteId } });
+      if (!existing) throw new BadRequestException('Target suite not found');
+      suite = existing;
+    } else {
+      suite = await this.testSuiteRepo.save(
+        this.testSuiteRepo.create({
+          projectId: dto.projectId,
+          name: dto.suiteName,
+          description: dto.suiteDescription ?? null,
+          variables: dto.suiteVariables ?? {},
+          createdBy: userId,
+        }),
+      );
+    }
+
+    // Create test cases
+    const testCases: TestCase[] = [];
+    for (const tcData of testCaseData) {
+      try {
+        const [{ val }] = await this.testCaseRepo.query("SELECT nextval('tc_id_seq') AS val");
+        const tcId = `TC-${String(val).padStart(3, '0')}`;
+        const steps = (tcData.steps || []).map((s: any, i: number) => ({
+          id: uuidv4(),
+          order: s.order ?? i + 1,
+          action: s.action ?? '',
+          expectedResult: s.expectedResult ?? s.expected ?? '',
+        }));
+        const tc = await this.testCaseRepo.save(
+          this.testCaseRepo.create({
+            tcId,
+            projectId: dto.projectId,
+            suiteId: suite.id,
+            createdBy: userId,
+            assignedTo: null,
+            title: String(tcData.title ?? 'Test Case'),
+            description: tcData.description ?? null,
+            preconditions: tcData.preconditions ?? null,
+            steps,
+            expectedResult: tcData.expectedResult ?? 'Test completes successfully',
+            priority: (tcData.priority as any) ?? Priority.MEDIUM,
+            type: TestType.AUTOMATED,
+            status: TestStatus.NOT_RUN,
+            tags: Array.isArray(tcData.tags) ? tcData.tags : [],
+            isAiGenerated: true,
+          }),
+        );
+
+        // Seed the codegen recording as the automation script for this test case
+        await this.scriptRepo.save(
+          this.scriptRepo.create({
+            testCaseId: tc.id,
+            projectId: dto.projectId,
+            name: `${tcId} - ${tc.title}`,
+            rawScript: dto.recordedScript,
+            cleanScript: dto.recordedScript,
+            healedScript: null,
+            activeScript: dto.recordedScript,
+            targetUrl: null,
+            status: ScriptStatus.READY,
+            source: ScriptSource.CODEGEN,
+            browserType: BrowserType.CHROMIUM,
+            stabilityScore: 70,
+            healingAttempts: 0,
+            maxHealingAttempts: 3,
+            createdBy: userId,
+          }),
+        );
+
+        testCases.push(tc);
+      } catch (err: any) {
+        this.logger.warn(`Failed to create test case "${tcData.title}": ${err.message}`);
+      }
+    }
+
+    return { suite, testCases, count: testCases.length };
+  }
+
+  private buildSuiteFromRecordingPrompt(script: string, flowDescription: string | undefined, suiteName: string): string {
+    const desc = flowDescription ? `The user described the flow as: "${flowDescription}"` : '';
+    return `You are a senior QA engineer. Analyze the following Playwright codegen recording and generate as many distinct, high-quality test cases as the flow warrants for the test suite "${suiteName}".
+
+${desc}
+
+## Playwright Recording
+\`\`\`typescript
+${script}
+\`\`\`
+
+## Instructions
+
+Analyze the recording carefully to understand:
+1. What feature or flow is being tested
+2. What user actions are taken (clicks, typing, navigation)
+3. What elements and selectors are used
+
+Decide the ideal number of test cases yourself. Generate enough to give thorough coverage:
+- Happy path scenarios (valid inputs, expected success)
+- Negative/error cases (invalid inputs, wrong credentials, missing required fields)
+- Edge cases (boundary values, empty fields, special characters)
+- Additional scenarios for different user perspectives where relevant
+
+For each test case, write granular step-by-step instructions based on the real selectors seen in the recording.
+
+## Output Format
+
+Return ONLY a valid JSON array (no markdown fences, no explanation outside the JSON):
+[
+  {
+    "title": "Descriptive title of what this test validates",
+    "description": "Why this test case is important / what scenario it covers",
+    "preconditions": "What must be true before the test starts (e.g. user must be logged out)",
+    "steps": [
+      { "order": 1, "action": "Navigate to the login page", "expectedResult": "Login form is displayed with username and password fields" },
+      { "order": 2, "action": "Enter valid username in the username field", "expectedResult": "Username field shows the entered text" }
+    ],
+    "expectedResult": "Single sentence describing the final expected outcome",
+    "priority": "high",
+    "tags": ["login", "auth", "smoke"]
+  }
+]
+
+Priority must be one of: "critical", "high", "medium", "low"`;
+  }
+
+  private extractJsonArray(raw: string): any[] {
+    let cleaned = raw.trim();
+    // Strip markdown fences
+    cleaned = cleaned.replace(/^```(?:json|typescript|js)?\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+    // Find the first [ ... ] block
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if (start === -1 || end === -1) return [];
+    try {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    } catch {
+      return [];
+    }
   }
 
   private extractScript(rawResponse: string): string {

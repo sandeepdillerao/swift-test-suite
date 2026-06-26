@@ -1,9 +1,9 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Users, Settings, Plus, Trash2, UserPlus, Shield, Link2,
   Clock, Key, Loader2, MoreHorizontal, FolderKanban, Check, ChevronsUpDown, X,
-  Pencil, Archive, ArchiveRestore, Server,
+  Pencil, Archive, ArchiveRestore, Server, Camera, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,7 +38,19 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useProjectStore } from '@/stores/projectStore';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
-import type { Project, ProjectMember, User } from '@/types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/services/api';
+import { Switch } from '@/components/ui/switch';
+import { CardDescription } from '@/components/ui/card';
+import type { Project, ProjectMember, User, PlaywrightConfig } from '@/types';
+
+const PW_DEFAULTS: Required<PlaywrightConfig> = {
+  testTimeout: 120000, actionTimeout: 0, navigationTimeout: 0,
+  retries: 0, workers: 1, defaultHeadless: true, defaultBrowser: 'chromium',
+  viewportWidth: 1280, viewportHeight: 720,
+  screenshot: 'on-failure', video: 'on-failure', trace: 'on-failure',
+  slowMo: 0, ignoreHttpsErrors: false,
+};
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
@@ -486,6 +498,7 @@ function AddMemberDialog({
 // ─── Settings Panel ──────────────────────────────────────────────────────────
 
 function SettingsPanel({ project, canEdit }: { project: Project; canEdit: boolean }) {
+  const queryClient = useQueryClient();
   const updateProject = useUpdateProject();
   const { data: jiraConfig } = useJiraConfig();
   const jiraConnected = !!jiraConfig?.connected;
@@ -494,6 +507,41 @@ function SettingsPanel({ project, canEdit }: { project: Project; canEdit: boolea
   const jiraProjects = jiraProjectsData?.projects ?? [];
   const [jiraProjectKey, setJiraProjectKey] = useState<string | null>(project.settings?.jiraProjectKey ?? null);
   const [jiraPopoverOpen, setJiraPopoverOpen] = useState(false);
+
+  // ── Playwright config override ────────────────────────────────────────────
+  const { data: globalSettings } = useQuery({ queryKey: ['settings'], queryFn: api.settings.getAll });
+  const globalPwConfig: Required<PlaywrightConfig> = { ...PW_DEFAULTS, ...(globalSettings?.playwrightConfig ?? {}) };
+
+  const projectPwOverride: Partial<PlaywrightConfig> = (project.settings?.playwrightConfig as Partial<PlaywrightConfig>) ?? {};
+  const [pwOverride, setPwOverride] = useState<Partial<PlaywrightConfig>>(projectPwOverride);
+
+  useEffect(() => {
+    setPwOverride((project.settings?.playwrightConfig as Partial<PlaywrightConfig>) ?? {});
+  }, [project.settings?.playwrightConfig]);
+
+  const savePwOverrideMutation = useMutation({
+    mutationFn: (override: Partial<PlaywrightConfig>) =>
+      api.projects.update(project.id, { settings: { ...project.settings, playwrightConfig: override } } as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', project.id] });
+      toast.success('Playwright override saved');
+    },
+    onError: () => toast.error('Failed to save override'),
+  });
+
+  const handlePwOverrideChange = <K extends keyof PlaywrightConfig>(key: K, value: PlaywrightConfig[K]) => {
+    const next = { ...pwOverride, [key]: value };
+    setPwOverride(next);
+    savePwOverrideMutation.mutate(next);
+  };
+
+  const handleResetPwOverride = () => {
+    setPwOverride({});
+    savePwOverrideMutation.mutate({});
+  };
+
+  const hasOverride = Object.keys(pwOverride).length > 0;
+  const effective = { ...globalPwConfig, ...pwOverride };
 
   const jiraLabel = useMemo(() => {
     if (!jiraProjectKey || !jiraProjects.length) return null;
@@ -609,6 +657,198 @@ function SettingsPanel({ project, canEdit }: { project: Project; canEdit: boolea
           </CardContent>
         </Card>
       )}
+
+      {/* Playwright Config Override */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Camera className="h-4 w-4 text-blue-500" /> Playwright Override
+              </CardTitle>
+              <CardDescription className="mt-1">
+                Override global Playwright defaults for this project. Blank = use global setting.
+              </CardDescription>
+            </div>
+            {hasOverride && canEdit && (
+              <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={handleResetPwOverride} disabled={savePwOverrideMutation.isPending}>
+                <RotateCcw className="h-3.5 w-3.5" /> Reset to global
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Timeouts */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Timeouts</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                { key: 'testTimeout', label: 'Test Timeout (ms)' },
+                { key: 'actionTimeout', label: 'Action Timeout (ms)' },
+                { key: 'navigationTimeout', label: 'Navigation Timeout (ms)' },
+              ] as const).map(({ key, label }) => (
+                <div key={key} className="space-y-1">
+                  <Label className="text-xs">{label}</Label>
+                  <Input
+                    type="number" min={0}
+                    value={pwOverride[key] ?? ''}
+                    placeholder={`${globalPwConfig[key]} (global)`}
+                    disabled={!canEdit}
+                    onChange={(e) => {
+                      const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                      const next = { ...pwOverride };
+                      if (v === undefined) delete next[key]; else (next[key] as any) = v;
+                      setPwOverride(next);
+                    }}
+                    onBlur={(e) => {
+                      const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                      const next = { ...pwOverride };
+                      if (v === undefined) delete next[key]; else (next[key] as any) = v;
+                      savePwOverrideMutation.mutate(next);
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Execution */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Execution</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Retries</Label>
+                <Input type="number" min={0} max={5}
+                  value={pwOverride.retries ?? ''}
+                  placeholder={`${globalPwConfig.retries} (global)`}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    const next = { ...pwOverride }; if (v === undefined) delete next.retries; else next.retries = v; setPwOverride(next);
+                  }}
+                  onBlur={(e) => {
+                    const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    const next = { ...pwOverride }; if (v === undefined) delete next.retries; else next.retries = v; savePwOverrideMutation.mutate(next);
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Workers</Label>
+                <Input type="number" min={1} max={8}
+                  value={pwOverride.workers ?? ''}
+                  placeholder={`${globalPwConfig.workers} (global)`}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    const next = { ...pwOverride }; if (v === undefined) delete next.workers; else next.workers = v; setPwOverride(next);
+                  }}
+                  onBlur={(e) => {
+                    const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    const next = { ...pwOverride }; if (v === undefined) delete next.workers; else next.workers = v; savePwOverrideMutation.mutate(next);
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Slow Mo (ms)</Label>
+                <Input type="number" min={0}
+                  value={pwOverride.slowMo ?? ''}
+                  placeholder={`${globalPwConfig.slowMo} (global)`}
+                  disabled={!canEdit}
+                  onChange={(e) => {
+                    const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    const next = { ...pwOverride }; if (v === undefined) delete next.slowMo; else next.slowMo = v; setPwOverride(next);
+                  }}
+                  onBlur={(e) => {
+                    const v = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    const next = { ...pwOverride }; if (v === undefined) delete next.slowMo; else next.slowMo = v; savePwOverrideMutation.mutate(next);
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Default Browser</Label>
+                <Select
+                  value={effective.defaultBrowser}
+                  onValueChange={(v) => handlePwOverrideChange('defaultBrowser', v)}
+                  disabled={!canEdit}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="chromium">Chromium</SelectItem>
+                    <SelectItem value="firefox">Firefox</SelectItem>
+                    <SelectItem value="webkit">WebKit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-6 mt-3">
+              <div className="flex items-center gap-3">
+                <Switch checked={effective.defaultHeadless} disabled={!canEdit}
+                  onCheckedChange={(v) => handlePwOverrideChange('defaultHeadless', v)} />
+                <span className="text-sm">Headless</span>
+                {pwOverride.defaultHeadless !== undefined && <span className="text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">overriding global</span>}
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={effective.ignoreHttpsErrors} disabled={!canEdit}
+                  onCheckedChange={(v) => handlePwOverrideChange('ignoreHttpsErrors', v)} />
+                <span className="text-sm">Ignore HTTPS errors</span>
+                {pwOverride.ignoreHttpsErrors !== undefined && <span className="text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">overriding global</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Viewport */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Viewport</p>
+            <div className="grid grid-cols-2 gap-3 max-w-xs">
+              <div className="space-y-1">
+                <Label className="text-xs">Width (px)</Label>
+                <Input type="number" min={320}
+                  value={pwOverride.viewportWidth ?? ''}
+                  placeholder={`${globalPwConfig.viewportWidth}`}
+                  disabled={!canEdit}
+                  onChange={(e) => { const v = e.target.value === '' ? undefined : parseInt(e.target.value); const next = { ...pwOverride }; if (v === undefined) delete next.viewportWidth; else next.viewportWidth = v; setPwOverride(next); }}
+                  onBlur={(e) => { const v = e.target.value === '' ? undefined : parseInt(e.target.value); const next = { ...pwOverride }; if (v === undefined) delete next.viewportWidth; else next.viewportWidth = v; savePwOverrideMutation.mutate(next); }}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Height (px)</Label>
+                <Input type="number" min={240}
+                  value={pwOverride.viewportHeight ?? ''}
+                  placeholder={`${globalPwConfig.viewportHeight}`}
+                  disabled={!canEdit}
+                  onChange={(e) => { const v = e.target.value === '' ? undefined : parseInt(e.target.value); const next = { ...pwOverride }; if (v === undefined) delete next.viewportHeight; else next.viewportHeight = v; setPwOverride(next); }}
+                  onBlur={(e) => { const v = e.target.value === '' ? undefined : parseInt(e.target.value); const next = { ...pwOverride }; if (v === undefined) delete next.viewportHeight; else next.viewportHeight = v; savePwOverrideMutation.mutate(next); }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Artifact Capture */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Artifact Capture</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {(['screenshot', 'video', 'trace'] as const).map((art) => (
+                <div key={art} className="space-y-1">
+                  <Label className="text-xs capitalize">{art}</Label>
+                  <Select
+                    value={effective[art]}
+                    onValueChange={(v) => handlePwOverrideChange(art, v as 'always' | 'on-failure' | 'never')}
+                    disabled={!canEdit}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="always">Always</SelectItem>
+                      <SelectItem value="on-failure">On Failure</SelectItem>
+                      <SelectItem value="never">Never</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {pwOverride[art] !== undefined && <span className="text-[10px] text-blue-500">overriding global</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

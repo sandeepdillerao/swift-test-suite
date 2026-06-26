@@ -1,5 +1,5 @@
 import { httpClient } from '../http-client';
-import type { AutomationScript, ScriptExecution } from '@/types';
+import type { AutomationScript, GenerateSuiteFromRecordingResult, ScriptExecution } from '@/types';
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
@@ -14,7 +14,7 @@ export interface CodegenSessionStatus {
 
 export const automationService = {
   // ─── Codegen Recording ──────────────────────────────────────────────────
-  startCodegen: (data: { testCaseId: string; projectId: string; targetUrl?: string; browserType?: string }) =>
+  startCodegen: (data: { testCaseId?: string; projectId: string; targetUrl?: string; browserType?: string }) =>
     httpClient.post<{ sessionId: string; status: string }>('/automation/codegen/start', data).then((r) => r.data),
 
   getCodegenStatus: (sessionId: string) =>
@@ -28,6 +28,19 @@ export const automationService = {
 
   saveCodegenDirect: (sessionId: string) =>
     httpClient.post<AutomationScript>(`/automation/codegen/${sessionId}/save-direct`).then((r) => r.data),
+
+  // ─── Record → Suite Generation ──────────────────────────────────────────
+  generateSuiteFromRecording: (data: {
+    projectId: string;
+    suiteName: string;
+    suiteDescription?: string;
+    recordedScript: string;
+    flowDescription?: string;
+    suiteVariables?: Record<string, string>;
+    environmentId?: string;
+    targetSuiteId?: string;
+  }) =>
+    httpClient.post<GenerateSuiteFromRecordingResult>('/automation/generate-suite-from-recording', data).then((r) => r.data),
 
   // ─── Script Generation ──────────────────────────────────────────────────
   generate: (data: {
@@ -56,7 +69,7 @@ export const automationService = {
     httpClient.delete(`/automation/scripts/${id}`).then((r) => r.data),
 
   // ─── Execution ──────────────────────────────────────────────────────────
-  execute: (scriptId: string, data?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean; variables?: Record<string, string> }) =>
+  execute: (scriptId: string, data?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean; variables?: Record<string, string>; environmentId?: string }) =>
     httpClient.post<ScriptExecution>(`/automation/scripts/${scriptId}/execute`, data || {}).then((r) => r.data),
 
   cancelExecution: (executionId: string) =>

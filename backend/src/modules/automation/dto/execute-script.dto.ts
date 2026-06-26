@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BrowserType } from '../entities/automation.enums';
 
@@ -7,6 +7,8 @@ export class ExecuteScriptDto {
   @ApiPropertyOptional() @IsOptional() @IsString() targetUrl?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() enableHealing?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() headless?: boolean;
-  @ApiPropertyOptional({ description: 'Environment variables to inject into script execution' })
+  @ApiPropertyOptional({ description: 'Environment variables to inject (non-sensitive). Auth passwords are resolved server-side via environmentId.' })
   @IsOptional() @IsObject() variables?: Record<string, string>;
+  @ApiPropertyOptional({ description: 'Resolve environment auth credentials server-side (decrypts passwords)' })
+  @IsOptional() @IsUUID() environmentId?: string;
 }

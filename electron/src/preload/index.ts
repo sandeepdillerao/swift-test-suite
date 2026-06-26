@@ -57,6 +57,10 @@ const electronApi = {
   showNotification: (title: string, body: string): void =>
     ipcRenderer.send('notification:show', { title, body }),
 
+  // ─── Storage ──────────────────────────────────────────────────────────
+  getStoragePath: (): Promise<string> => ipcRenderer.invoke('app:get-storage-path'),
+  openStorageFolder: (): Promise<string> => ipcRenderer.invoke('app:open-storage-folder'),
+
   // ─── Secure storage ───────────────────────────────────────────────────
   getCredential: (key: string): Promise<string | null> => ipcRenderer.invoke('secure:get', key),
   setCredential: (key: string, value: string): Promise<void> => ipcRenderer.invoke('secure:set', key, value),
@@ -184,5 +188,7 @@ export interface ElectronAPI {
   checkPlaywright(): Promise<{ ok: boolean; path: string }>
   getPlatformInfo(): Promise<{ platform: string; arch: string }>
   getSystemTheme(): Promise<'light' | 'dark'>
+  getStoragePath(): Promise<string>
+  openStorageFolder(): Promise<string>
   on(channel: ElectronChannel, listener: (data?: unknown) => void): () => void
 }

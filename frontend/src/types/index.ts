@@ -62,6 +62,23 @@ export interface Organization {
   createdAt: string;
 }
 
+export interface PlaywrightConfig {
+  testTimeout: number;
+  actionTimeout: number;
+  navigationTimeout: number;
+  retries: number;
+  workers: number;
+  defaultHeadless: boolean;
+  defaultBrowser: string;
+  viewportWidth: number;
+  viewportHeight: number;
+  screenshot: 'always' | 'on-failure' | 'never';
+  video: 'always' | 'on-failure' | 'never';
+  trace: 'always' | 'on-failure' | 'never';
+  slowMo: number;
+  ignoreHttpsErrors: boolean;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -70,7 +87,7 @@ export interface Project {
   organizationId: string;
   isArchived: boolean;
   createdBy: string;
-  settings: Record<string, unknown> & { jiraProjectKey?: string };
+  settings: Record<string, unknown> & { jiraProjectKey?: string; playwrightConfig?: Partial<PlaywrightConfig> };
   createdAt: string;
   updatedAt: string;
 }
@@ -82,7 +99,9 @@ export interface TestSuite {
   projectId: string;
   parentId?: string;
   testCasesCount: number;
+  variables: Record<string, string>;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface TestCase {
@@ -99,6 +118,7 @@ export interface TestCase {
   suiteId: string;
   projectId: string;
   tags: string[];
+  variables: Record<string, string>;
   createdBy: string;
   assignedTo?: string;
   jiraTicketId?: string;
@@ -106,9 +126,16 @@ export interface TestCase {
   jiraSubtaskId?: string;
   jiraSubtaskUrl?: string;
   jiraSyncStatus?: 'synced' | 'pending' | 'error' | 'not_linked';
+  isAiGenerated?: boolean;
   createdAt: string;
   updatedAt: string;
   lastRunAt?: string;
+}
+
+export interface GenerateSuiteFromRecordingResult {
+  suite: TestSuite;
+  testCases: TestCase[];
+  count: number;
 }
 
 export interface TestStep {
@@ -311,6 +338,7 @@ export interface StructuredLogs {
     location?: string;
     actions?: Array<{
       title: string;
+      category?: string;
       status: 'passed' | 'failed';
       duration: string;
       error?: string;

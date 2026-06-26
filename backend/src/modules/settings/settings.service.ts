@@ -9,6 +9,7 @@ import { UpdateNotificationsDto } from './dto/update-notifications.dto';
 import { UpdateOrganizationSettingsDto } from './dto/update-organization-settings.dto';
 import { SetApiKeyDto } from './dto/set-api-key.dto';
 import { UpdateAiSettingsDto } from './dto/update-ai-settings.dto';
+import { UpdatePlaywrightConfigDto, PLAYWRIGHT_CONFIG_DEFAULTS } from './dto/update-playwright-config.dto';
 
 export const VALID_PROVIDERS = ['openai', 'anthropic', 'gemini'] as const;
 export type AiProvider = typeof VALID_PROVIDERS[number];
@@ -40,11 +41,21 @@ export class SettingsService {
       activeProvider: 'gemini',
       activeModel: 'gemini-2.5-flash',
       enabledProviders: { gemini: true, openai: true, anthropic: true },
+      autoHealer: false,
     };
     // Ensure enabledProviders always has a default
     if (!aiSettings.enabledProviders) {
       aiSettings.enabledProviders = { gemini: true, openai: true, anthropic: true };
     }
+    // Ensure autoHealer defaults to false for existing users who don't have it set
+    if (aiSettings.autoHealer === undefined) {
+      aiSettings.autoHealer = false;
+    }
+    // Playwright config — fill in any missing keys with defaults
+    const playwrightConfig = {
+      ...PLAYWRIGHT_CONFIG_DEFAULTS,
+      ...((user.settings as any)?.playwrightConfig ?? {}),
+    };
 
     const encryptedKeys: Record<string, any> = (user.settings as any)?.encryptedApiKeys ?? {};
     const configuredProviders = VALID_PROVIDERS.map(p => ({ provider: p, configured: !!encryptedKeys[p] }));
@@ -61,6 +72,7 @@ export class SettingsService {
       },
       notifications,
       ai: aiSettings,
+      playwrightConfig,
       configuredProviders,
       organization: user.organization ? {
         id: user.organization.id,
@@ -111,6 +123,16 @@ export class SettingsService {
 
     await this.orgRepo.save({ ...org, ...updates });
     return this.orgRepo.findOne({ where: { id: org.id } });
+  }
+
+  async updatePlaywrightConfig(userId: string, dto: UpdatePlaywrightConfigDto) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const current = (user.settings as any)?.playwrightConfig ?? {};
+    const updated = { ...user.settings, playwrightConfig: { ...current, ...dto } };
+    await this.userRepo.save({ ...user, settings: updated });
+    return { ...PLAYWRIGHT_CONFIG_DEFAULTS, ...updated.playwrightConfig };
   }
 
   async setApiKey(userId: string, provider: AiProvider, dto: SetApiKeyDto) {

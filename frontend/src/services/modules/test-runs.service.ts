@@ -45,6 +45,23 @@ export const testRunsService = {
   getReport: (runId: string) =>
     httpClient.get<any>(`/test-runs/${runId}/report`).then((r) => r.data),
 
+  exportCsv: async (runId: string, runName: string) => {
+    const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
+    const { default: axios } = await import('axios');
+    const { getState } = await import('@/stores/authStore');
+    const token = getState().accessToken;
+    const response = await axios.get(`${BASE}/test-runs/${runId}/export/csv`, {
+      headers: { Authorization: `Bearer ${token}` },
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(new Blob([response.data], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${runName.replace(/[^a-zA-Z0-9]/g, '-')}-report.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   // ── Suite automation summary ───────────────────────────────────────────
   getSuiteAutomationSummary: (suiteId: string) =>
     httpClient.get<SuiteAutomationSummary>(`/test-runs/suite/${suiteId}/automation-summary`).then((r) => r.data),

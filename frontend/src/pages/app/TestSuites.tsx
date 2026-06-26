@@ -7,7 +7,8 @@ import {
   TestTube2,
   MoreHorizontal,
   Pencil,
-  Trash2
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -87,6 +88,7 @@ export const TestSuites = () => {
     }
   };
 
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -105,12 +107,23 @@ export const TestSuites = () => {
             Organize test cases into logical groups
           </p>
         </div>
-        <CanShow permission="test_suites:create">
-          <Button className="gap-2" onClick={handleCreate} disabled={!projectId}>
-            <Plus className="h-4 w-4" />
-            New Suite
-          </Button>
-        </CanShow>
+        <div className="flex items-center gap-2">
+          <CanShow permission="test_suites:create">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => navigate('/app/test-suites/generate-from-recording')}
+              disabled={!projectId}
+            >
+              <Sparkles className="h-4 w-4 text-primary" />
+              Generate from Recording
+            </Button>
+            <Button className="gap-2" onClick={handleCreate} disabled={!projectId}>
+              <Plus className="h-4 w-4" />
+              New Suite
+            </Button>
+          </CanShow>
+        </div>
       </div>
 
       {!projectId && (
@@ -182,6 +195,11 @@ export const TestSuites = () => {
                 <p className="text-sm text-muted-foreground line-clamp-2">
                   {suite.description}
                 </p>
+                {suite.variables && Object.keys(suite.variables).length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {Object.keys(suite.variables).length} suite variable{Object.keys(suite.variables).length !== 1 ? 's' : ''}
+                  </p>
+                )}
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
                     <TestTube2 className="h-4 w-4" />
@@ -212,13 +230,19 @@ export const TestSuites = () => {
           <FolderTree className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium">No test suites yet</h3>
           <p className="text-muted-foreground text-sm mt-1">
-            Create your first test suite to organize your test cases
+            Create manually or generate one from a Playwright recording
           </p>
           <CanShow permission="test_suites:create">
-            <Button className="mt-4 gap-2" onClick={handleCreate}>
-              <Plus className="h-4 w-4" />
-              Create Suite
-            </Button>
+            <div className="flex items-center gap-3 mt-4">
+              <Button variant="outline" className="gap-2" onClick={() => navigate('/app/test-suites/generate-from-recording')}>
+                <Sparkles className="h-4 w-4 text-primary" />
+                Generate from Recording
+              </Button>
+              <Button className="gap-2" onClick={handleCreate}>
+                <Plus className="h-4 w-4" />
+                Create Suite
+              </Button>
+            </div>
           </CanShow>
         </Card>
       )}

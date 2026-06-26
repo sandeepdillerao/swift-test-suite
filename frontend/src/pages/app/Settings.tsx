@@ -16,6 +16,7 @@ import {
   Trash2,
   Sun,
   Moon,
+  Camera,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,7 @@ import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { Monitor } from 'lucide-react';
 
-type Tab = 'profile' | 'security' | 'notifications' | 'ai' | 'organization' | 'appearance' | 'desktop';
+type Tab = 'profile' | 'security' | 'notifications' | 'ai' | 'playwright' | 'organization' | 'appearance' | 'desktop';
 
 const isElectron = !!window.electron?.isElectron;
 
@@ -45,6 +46,7 @@ const tabs: { id: Tab; label: string; icon: typeof User }[] = [
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'ai', label: 'AI Config', icon: Bot },
+  { id: 'playwright', label: 'Playwright', icon: Camera },
   { id: 'organization', label: 'Organization', icon: Building2 },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   ...(isElectron ? [{ id: 'desktop' as const, label: 'Desktop App', icon: Monitor }] : []),
@@ -57,7 +59,7 @@ export const Settings = () => {
   const queryClient = useQueryClient();
 
   // AI config store — only UI preferences (provider/model), no keys
-  const { activeProvider, activeModel, enabledProviders, setActiveProvider, setActiveModel, setProviderEnabled, getEnabledProviders } = useAIConfigStore();
+  const { activeProvider, activeModel, enabledProviders, autoHealer, setActiveProvider, setActiveModel, setProviderEnabled, setAutoHealer, getEnabledProviders } = useAIConfigStore();
 
   // ── Settings from backend ──────────────────────────────────────────────────
   const { data: settings, isLoading: settingsLoading } = useQuery({
@@ -83,6 +85,10 @@ export const Settings = () => {
       }
       if (settings.ai.activeModel && settings.ai.activeModel !== activeModel) {
         setActiveModel(settings.ai.activeModel);
+      }
+      // Sync autoHealer flag
+      if (typeof settings.ai.autoHealer === 'boolean' && settings.ai.autoHealer !== autoHealer) {
+        setAutoHealer(settings.ai.autoHealer);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,6 +121,43 @@ export const Settings = () => {
     const next = { ...notifs, [key]: !notifs[key] };
     setNotifs(next);
     updateNotifsMutation.mutate(next);
+  };
+
+  // ── Playwright config state ───────────────────────────────────────────────
+  const [pwConfig, setPwConfig] = useState({
+    testTimeout: 120000,
+    actionTimeout: 0,
+    navigationTimeout: 0,
+    retries: 0,
+    workers: 1,
+    defaultHeadless: true,
+    defaultBrowser: 'chromium',
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    screenshot: 'on-failure' as 'always' | 'on-failure' | 'never',
+    video: 'on-failure' as 'always' | 'on-failure' | 'never',
+    trace: 'on-failure' as 'always' | 'on-failure' | 'never',
+    slowMo: 0,
+    ignoreHttpsErrors: false,
+  });
+
+  useEffect(() => {
+    if (settings?.playwrightConfig) setPwConfig(settings.playwrightConfig as typeof pwConfig);
+  }, [settings?.playwrightConfig]);
+
+  const updatePwMutation = useMutation({
+    mutationFn: api.settings.updatePlaywrightConfig,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      toast.success('Playwright config saved');
+    },
+    onError: () => toast.error('Failed to save Playwright config'),
+  });
+
+  const handlePwChange = <K extends keyof typeof pwConfig>(key: K, value: typeof pwConfig[K]) => {
+    const next = { ...pwConfig, [key]: value };
+    setPwConfig(next);
+    updatePwMutation.mutate(next);
   };
 
   // ── Profile state ──────────────────────────────────────────────────────────
@@ -229,6 +272,16 @@ export const Settings = () => {
       activeProvider: newActive,
       activeModel: newModel,
       enabledProviders: updated,
+    });
+  };
+
+  const handleAutoHealerToggle = (enabled: boolean) => {
+    setAutoHealer(enabled);
+    updateAiMutation.mutate({
+      activeProvider,
+      activeModel,
+      enabledProviders,
+      autoHealer: enabled,
     });
   };
 
@@ -600,6 +653,59 @@ export const Settings = () => {
               </CardContent>
             </Card>
 
+            {/* Auto Healer */}
+            <Card>
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-amber-500" />
+                      Auto Healer
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      Automatically attempt to fix failed Playwright scripts using AI after each execution
+                    </CardDescription>
+                  </div>
+                  <Switch
+                    checked={autoHealer}
+                    onCheckedChange={handleAutoHealerToggle}
+                    disabled={updateAiMutation.isPending}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className={cn(
+                  'rounded-lg border p-3 text-xs space-y-1.5',
+                  autoHealer
+                    ? 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30'
+                    : 'border-border bg-muted/30'
+                )}>
+                  {autoHealer ? (
+                    <>
+                      <p className="font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Auto Healer is ON
+                      </p>
+                      <p className="text-muted-foreground">
+                        When a script fails, the AI will analyse the error and the current page state, rewrite the broken selectors or steps, and retry automatically. Each attempt is logged in the execution history.
+                      </p>
+                      <p className="text-muted-foreground">
+                        Max healing attempts per script is set per-script in the automation panel. Consumes AI tokens on each attempt.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium flex items-center gap-1.5 text-muted-foreground">
+                        <AlertCircle className="h-3.5 w-3.5" /> Auto Healer is OFF (default)
+                      </p>
+                      <p className="text-muted-foreground">
+                        Scripts will run as-is. If a test fails you can manually trigger healing from the execution result panel. Enable this to have it run automatically on every failure.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* API Keys per provider */}
             <Card>
               <CardHeader>
@@ -719,6 +825,162 @@ export const Settings = () => {
                     </Card>
                   );
                 })}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* ── Playwright Config ────────────────────────────────────────────── */}
+        {activeTab === 'playwright' && (
+          <>
+            <div>
+              <h2 className="text-xl font-semibold">Playwright Configuration</h2>
+              <p className="text-sm text-muted-foreground">Global defaults for all test executions. Override per-project in Project → Settings.</p>
+            </div>
+
+            {/* Timeouts */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Timeouts</CardTitle>
+                <CardDescription>Control how long Playwright waits before timing out</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Test Timeout (ms)</Label>
+                  <Input type="number" min={0} value={pwConfig.testTimeout}
+                    onChange={(e) => handlePwChange('testTimeout', parseInt(e.target.value) || 0)}
+                    onBlur={(e) => updatePwMutation.mutate({ testTimeout: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Max time per test. Default: 120000 ms (2 min)</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Action Timeout (ms)</Label>
+                  <Input type="number" min={0} value={pwConfig.actionTimeout}
+                    onChange={(e) => handlePwChange('actionTimeout', parseInt(e.target.value) || 0)}
+                    onBlur={(e) => updatePwMutation.mutate({ actionTimeout: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Per-action timeout. 0 = no limit (Playwright default)</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Navigation Timeout (ms)</Label>
+                  <Input type="number" min={0} value={pwConfig.navigationTimeout}
+                    onChange={(e) => handlePwChange('navigationTimeout', parseInt(e.target.value) || 0)}
+                    onBlur={(e) => updatePwMutation.mutate({ navigationTimeout: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Page navigation timeout. 0 = no limit</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Execution */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Execution</CardTitle>
+                <CardDescription>Retry, concurrency, and browser defaults</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Retries</Label>
+                    <Input type="number" min={0} max={5} value={pwConfig.retries}
+                      onChange={(e) => handlePwChange('retries', parseInt(e.target.value) || 0)}
+                      onBlur={(e) => updatePwMutation.mutate({ retries: parseInt(e.target.value) || 0 })}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Retries on failure (0–5)</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Workers</Label>
+                    <Input type="number" min={1} max={8} value={pwConfig.workers}
+                      onChange={(e) => handlePwChange('workers', parseInt(e.target.value) || 1)}
+                      onBlur={(e) => updatePwMutation.mutate({ workers: parseInt(e.target.value) || 1 })}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Parallel workers (1–8)</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Slow Mo (ms)</Label>
+                    <Input type="number" min={0} value={pwConfig.slowMo}
+                      onChange={(e) => handlePwChange('slowMo', parseInt(e.target.value) || 0)}
+                      onBlur={(e) => updatePwMutation.mutate({ slowMo: parseInt(e.target.value) || 0 })}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Slow down each action by N ms</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Default Browser</Label>
+                    <Select value={pwConfig.defaultBrowser} onValueChange={(v) => handlePwChange('defaultBrowser', v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="chromium">Chromium</SelectItem>
+                        <SelectItem value="firefox">Firefox</SelectItem>
+                        <SelectItem value="webkit">WebKit (Safari)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-6 pt-1">
+                  <div className="flex items-center gap-3">
+                    <Switch checked={pwConfig.defaultHeadless} onCheckedChange={(v) => handlePwChange('defaultHeadless', v)} />
+                    <div>
+                      <p className="text-sm font-medium">Headless by default</p>
+                      <p className="text-xs text-muted-foreground">Run browser without visible UI</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Switch checked={pwConfig.ignoreHttpsErrors} onCheckedChange={(v) => handlePwChange('ignoreHttpsErrors', v)} />
+                    <div>
+                      <p className="text-sm font-medium">Ignore HTTPS errors</p>
+                      <p className="text-xs text-muted-foreground">Ignore SSL certificate errors</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Viewport */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Viewport</CardTitle>
+                <CardDescription>Default browser window size for all tests</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4 max-w-xs">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Width (px)</Label>
+                  <Input type="number" min={320} value={pwConfig.viewportWidth}
+                    onChange={(e) => handlePwChange('viewportWidth', parseInt(e.target.value) || 1280)}
+                    onBlur={(e) => updatePwMutation.mutate({ viewportWidth: parseInt(e.target.value) || 1280 })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Height (px)</Label>
+                  <Input type="number" min={240} value={pwConfig.viewportHeight}
+                    onChange={(e) => handlePwChange('viewportHeight', parseInt(e.target.value) || 720)}
+                    onBlur={(e) => updatePwMutation.mutate({ viewportHeight: parseInt(e.target.value) || 720 })}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Artifact Capture */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Camera className="h-4 w-4 text-blue-500" /> Artifact Capture
+                </CardTitle>
+                <CardDescription>When to save screenshots, video recordings, and trace files</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {(['screenshot', 'video', 'trace'] as const).map((art) => (
+                  <div key={art} className="space-y-1.5">
+                    <Label className="text-xs capitalize">{art}</Label>
+                    <Select value={pwConfig[art]} onValueChange={(v) => handlePwChange(art, v as 'always' | 'on-failure' | 'never')}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="always">Always</SelectItem>
+                        <SelectItem value="on-failure">On Failure</SelectItem>
+                        <SelectItem value="never">Never</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </>
@@ -1073,10 +1335,39 @@ const ElectronSettingsPanel = () => {
         </CardContent>
       </Card>
 
+      <StorageSection />
+
       <Button onClick={handleSave} disabled={saving} className="gap-2 w-fit">
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         Save Desktop Settings
       </Button>
     </>
+  );
+};
+
+const StorageSection = () => {
+  const [storagePath, setStoragePath] = useState<string | null>(null);
+  useEffect(() => {
+    window.electron?.getStoragePath().then(setStoragePath).catch(() => {});
+  }, []);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Storage Location</CardTitle>
+        <CardDescription>Where TestFlow stores artifacts, screenshots, videos, and reports</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {storagePath && (
+          <div className="font-mono text-xs bg-muted rounded px-3 py-2 break-all">{storagePath}</div>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => window.electron?.openStorageFolder()}
+        >
+          Open in Finder / Explorer
+        </Button>
+      </CardContent>
+    </Card>
   );
 };

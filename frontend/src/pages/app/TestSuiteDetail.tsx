@@ -34,6 +34,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { usePermissions } from '@/hooks/usePermissions';
 import { CanShow } from '@/components/auth/PermissionGuard';
+import { VariablesEditor } from '@/components/common/VariablesEditor';
 import type { TestSuite, TestCase } from '@/types';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -65,6 +66,7 @@ export const TestSuiteDetail = () => {
   const [runBuild, setRunBuild] = useState('');
 
   const isLoading = suiteLoading || casesLoading;
+  const { can } = usePermissions();
 
   if (isLoading) {
     return (
@@ -303,6 +305,26 @@ export const TestSuiteDetail = () => {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Suite Variables */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Suite Variables</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <VariablesEditor
+            value={suite.variables ?? {}}
+            onChange={(vars) => {
+              updateSuite.mutate(
+                { id: suite.id, data: { variables: vars } },
+                { onSuccess: () => toast.success('Variables saved'), onError: () => toast.error('Failed to save variables') },
+              );
+            }}
+            description="Variables defined here are available to all test cases in this suite and override project-level variables."
+            readOnly={!can('test_suites:update')}
+          />
         </CardContent>
       </Card>
 

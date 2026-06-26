@@ -36,9 +36,11 @@ interface AIConfigState {
   activeProvider: AIProvider;
   activeModel: string;
   enabledProviders: Record<AIProvider, boolean>;
+  autoHealer: boolean;
   setActiveProvider: (provider: AIProvider) => void;
   setActiveModel: (model: string) => void;
   setProviderEnabled: (provider: AIProvider, enabled: boolean) => void;
+  setAutoHealer: (enabled: boolean) => void;
   getEnabledProviders: () => AIProviderConfig[];
 }
 
@@ -48,6 +50,7 @@ export const useAIConfigStore = create<AIConfigState>()(
       activeProvider: 'gemini',
       activeModel: 'gemini-2.5-flash',
       enabledProviders: { gemini: true, openai: true, anthropic: true },
+      autoHealer: false,
       setActiveProvider: (provider) => {
         const providerConfig = AI_PROVIDERS.find((p) => p.provider === provider);
         set({
@@ -56,6 +59,7 @@ export const useAIConfigStore = create<AIConfigState>()(
         });
       },
       setActiveModel: (model) => set({ activeModel: model }),
+      setAutoHealer: (enabled) => set({ autoHealer: enabled }),
       setProviderEnabled: (provider, enabled) => {
         const state = get();
         const next = { ...state.enabledProviders, [provider]: enabled };

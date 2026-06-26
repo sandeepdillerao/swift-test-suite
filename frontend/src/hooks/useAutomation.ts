@@ -28,7 +28,7 @@ export const useAutomationScript = (id?: string) => {
 
 export const useStartCodegen = () => {
   return useMutation({
-    mutationFn: (data: { testCaseId: string; projectId: string; targetUrl?: string; browserType?: string }) =>
+    mutationFn: (data: { testCaseId?: string; projectId: string; targetUrl?: string; browserType?: string }) =>
       api.automation.startCodegen(data),
   });
 };
@@ -71,6 +71,18 @@ export const useSaveCodegenDirect = () => {
     mutationFn: (sessionId: string) => api.automation.saveCodegenDirect(sessionId),
     onSuccess: (script) => {
       queryClient.invalidateQueries({ queryKey: ['automationScripts', script.testCaseId] });
+    },
+  });
+};
+
+export const useGenerateSuiteFromRecording = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.automation.generateSuiteFromRecording>[0]) =>
+      api.automation.generateSuiteFromRecording(data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['testSuites'] });
+      queryClient.invalidateQueries({ queryKey: ['testCases', result.suite.projectId] });
     },
   });
 };
@@ -123,7 +135,7 @@ export const useDeleteScript = () => {
 export const useExecuteScript = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ scriptId, options }: { scriptId: string; options?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean; variables?: Record<string, string> } }) =>
+    mutationFn: ({ scriptId, options }: { scriptId: string; options?: { browserType?: string; targetUrl?: string; enableHealing?: boolean; headless?: boolean; variables?: Record<string, string>; environmentId?: string } }) =>
       api.automation.execute(scriptId, options),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automationScripts'] });

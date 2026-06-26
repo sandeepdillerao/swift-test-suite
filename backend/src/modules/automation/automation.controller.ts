@@ -26,6 +26,7 @@ import { GenerateScriptDto, ImportCodegenScriptDto } from './dto/generate-script
 import { UpdateScriptDto } from './dto/update-script.dto';
 import { ExecuteScriptDto } from './dto/execute-script.dto';
 import { StartCodegenDto } from './dto/codegen-session.dto';
+import { GenerateSuiteFromRecordingDto } from './dto/generate-suite-from-recording.dto';
 
 @ApiTags('Automation')
 @ApiBearerAuth()
@@ -68,6 +69,15 @@ export class AutomationController {
   @ApiOperation({ summary: 'Save codegen recording as-is without AI processing' })
   saveCodegenDirect(@CurrentUser() user: User, @Param('sessionId') sessionId: string) {
     return this.service.saveCodegenDirect(user.id, sessionId);
+  }
+
+  // ─── Record → TestSuite AI Generation ────────────────────────────────────
+
+  @Post('generate-suite-from-recording')
+  @Roles(UserRole.ADMIN, UserRole.QA_LEAD, UserRole.TESTER)
+  @ApiOperation({ summary: 'AI: analyze a Playwright recording and generate an entire test suite with multiple test cases' })
+  generateSuiteFromRecording(@CurrentUser() user: User, @Body() dto: GenerateSuiteFromRecordingDto) {
+    return this.service.generateSuiteFromRecording(user.id, dto);
   }
 
   // ─── Script Generation ────────────────────────────────────────────────────

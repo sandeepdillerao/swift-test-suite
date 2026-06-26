@@ -9,6 +9,7 @@ import { UpdateNotificationsDto } from './dto/update-notifications.dto';
 import { UpdateOrganizationSettingsDto } from './dto/update-organization-settings.dto';
 import { SetApiKeyDto } from './dto/set-api-key.dto';
 import { UpdateAiSettingsDto } from './dto/update-ai-settings.dto';
+import { UpdatePlaywrightConfigDto } from './dto/update-playwright-config.dto';
 
 @ApiTags('Settings')
 @ApiBearerAuth()
@@ -33,6 +34,12 @@ export class SettingsController {
   @ApiOperation({ summary: 'Update AI provider/model preferences' })
   updateAiSettings(@CurrentUser() user: User, @Body() dto: UpdateAiSettingsDto) {
     return this.service.updateAiSettings(user.id, dto);
+  }
+
+  @Patch('playwright')
+  @ApiOperation({ summary: 'Update Playwright execution configuration' })
+  updatePlaywrightConfig(@CurrentUser() user: User, @Body() dto: UpdatePlaywrightConfigDto) {
+    return this.service.updatePlaywrightConfig(user.id, dto);
   }
 
   @Patch('organization')

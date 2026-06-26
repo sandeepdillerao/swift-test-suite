@@ -87,6 +87,8 @@ interface ElectronAPI {
   installPlaywright(): Promise<{ ok: boolean; error?: string }>
   getPlatformInfo(): Promise<{ platform: string; arch: string }>
   getSystemTheme(): Promise<'light' | 'dark'>
+  getStoragePath(): Promise<string>
+  openStorageFolder(): Promise<string>
   on(channel: ElectronChannel, listener: (data?: unknown) => void): () => void
 }
 

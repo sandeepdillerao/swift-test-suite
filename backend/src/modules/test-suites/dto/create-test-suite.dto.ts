@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsUUID, Length } from 'class-validator';
+import { IsObject, IsOptional, IsString, IsUUID, Length } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTestSuiteDto {
@@ -6,4 +6,5 @@ export class CreateTestSuiteDto {
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
   @ApiProperty() @IsUUID() projectId: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() parentId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsObject() variables?: Record<string, string>;
 }

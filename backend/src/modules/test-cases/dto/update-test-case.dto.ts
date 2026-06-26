@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsOptional, IsString, IsUUID, Length, ValidateNested } from 'class-validator';
+import { IsArray, IsEnum, IsObject, IsOptional, IsString, IsUUID, Length, ValidateNested } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { JiraSyncStatus, Priority, TestStatus, TestType } from '../entities/test-case.enums';
@@ -21,4 +21,5 @@ export class UpdateTestCaseDto {
   @ApiPropertyOptional() @IsOptional() @IsString() jiraSubtaskId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() jiraSubtaskUrl?: string;
   @ApiPropertyOptional({ enum: JiraSyncStatus }) @IsOptional() @IsEnum(JiraSyncStatus) jiraSyncStatus?: JiraSyncStatus;
+  @ApiPropertyOptional() @IsOptional() @IsObject() variables?: Record<string, string>;
 }

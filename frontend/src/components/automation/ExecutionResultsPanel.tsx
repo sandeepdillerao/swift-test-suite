@@ -155,23 +155,22 @@ export function HealingInfo({ details }: { details: ScriptExecution['healingDeta
 // ─── Step Result Item ───────────────────────────────────────────────────────
 
 export function StepResultItem({ step, index }: { step: StructuredLogs['steps'][number]; index: number }) {
-  const [expanded, setExpanded] = useState(false);
+  // Auto-expand failed steps so pass/fail is immediately visible without clicking
+  const [expanded, setExpanded] = useState(step.status === 'failed');
   const cfg = getExecutionStatusConfig(step.status);
   const StatusIcon = cfg.icon;
-  const hasActions = step.actions && step.actions.length > 0;
-  const hasDetails = hasActions || step.error || step.snippet;
+  const actions = step.actions ?? [];
+  const hasDetails = actions.length > 0 || step.error || step.snippet;
+
+  const passedActions = actions.filter((a) => a.status === 'passed').length;
+  const failedActions = actions.filter((a) => a.status === 'failed').length;
 
   return (
     <div className={`rounded border text-xs ${cfg.bg}`}>
       <button
         onClick={() => hasDetails && setExpanded(!expanded)}
-        className={`w-full flex items-start gap-2 p-2 text-left ${hasDetails ? 'cursor-pointer hover:bg-muted/30' : 'cursor-default'}`}
+        className={`w-full flex items-start gap-2 p-2.5 text-left ${hasDetails ? 'cursor-pointer hover:bg-muted/20' : 'cursor-default'}`}
       >
-        {hasDetails ? (
-          expanded ? <ChevronDown className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <StatusIcon className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${cfg.color}`} />
-        )}
         <StatusIcon className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${cfg.color}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
@@ -180,42 +179,90 @@ export function StepResultItem({ step, index }: { step: StructuredLogs['steps'][
               {step.name}
             </span>
             <div className="flex items-center gap-2 shrink-0">
-              <Badge variant={step.status === 'passed' ? 'default' : step.status === 'failed' ? 'destructive' : 'secondary'} className="text-[10px] h-4 px-1.5">
+              {/* per-action summary chips */}
+              {actions.length > 0 && (
+                <span className="flex items-center gap-1 text-[10px]">
+                  {passedActions > 0 && (
+                    <span className="flex items-center gap-0.5 text-green-600 dark:text-green-400">
+                      <CheckCircle2 className="h-3 w-3" />{passedActions}
+                    </span>
+                  )}
+                  {failedActions > 0 && (
+                    <span className="flex items-center gap-0.5 text-red-500">
+                      <XCircle className="h-3 w-3" />{failedActions}
+                    </span>
+                  )}
+                </span>
+              )}
+              <Badge
+                variant={step.status === 'passed' ? 'default' : step.status === 'failed' ? 'destructive' : 'secondary'}
+                className="text-[10px] h-4 px-1.5 capitalize"
+              >
                 {step.status}
               </Badge>
               <span className="text-muted-foreground">{step.duration}</span>
+              {hasDetails && (
+                expanded
+                  ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
             </div>
           </div>
         </div>
       </button>
 
-      {expanded && (
-        <div className="px-3 pb-3 pt-0 space-y-2 border-t ml-5">
-          {hasActions && (
-            <div className="space-y-0.5 mt-2">
-              {step.actions!.map((action, ai) => (
-                <div
-                  key={ai}
-                  className={`flex items-center gap-2 py-1 px-2 rounded ${
-                    action.status === 'passed' ? 'bg-green-50/50 dark:bg-green-950/10' : 'bg-red-50/50 dark:bg-red-950/10'
-                  }`}
-                >
-                  {action.status === 'passed' ? (
-                    <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
-                  ) : (
-                    <XCircle className="h-3 w-3 text-red-500 shrink-0" />
+      {expanded && hasDetails && (
+        <div className="border-t">
+          {/* Action-level step list */}
+          {actions.length > 0 && (
+            <div className="divide-y">
+              {actions.map((action, ai) => (
+                <div key={ai}>
+                  <div className={`flex items-center gap-2 px-3 py-1.5 ${
+                    action.status === 'passed'
+                      ? 'bg-green-500/5'
+                      : 'bg-red-500/5'
+                  }`}>
+                    {action.status === 'passed' ? (
+                      <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                    ) : (
+                      <XCircle className="h-3 w-3 text-red-500 shrink-0" />
+                    )}
+                    <span className="text-[10px] text-muted-foreground w-5 shrink-0 font-mono">{ai + 1}.</span>
+                    {action.category && action.category !== 'test' && (
+                      <span className="text-[9px] font-mono text-muted-foreground bg-muted/60 px-1 rounded shrink-0">
+                        {action.category}
+                      </span>
+                    )}
+                    <span className="flex-1 font-mono text-[11px] break-all">{action.title}</span>
+                    {action.duration && (
+                      <span className="text-muted-foreground text-[10px] shrink-0">{action.duration}</span>
+                    )}
+                  </div>
+                  {action.error && (
+                    <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap text-[10px] bg-red-50 dark:bg-red-950/20 px-3 py-2 ml-10">
+                      {action.error}
+                    </pre>
                   )}
-                  <span className="flex-1 font-mono text-[11px] truncate" title={action.title}>{action.title}</span>
-                  <span className="text-muted-foreground text-[10px] shrink-0">{action.duration}</span>
                 </div>
               ))}
             </div>
           )}
-          {step.error && (
-            <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words text-[11px] bg-red-50 dark:bg-red-950/20 p-2 rounded mt-2">{step.error}</pre>
-          )}
-          {step.snippet && (
-            <pre className="text-muted-foreground whitespace-pre-wrap text-[11px] bg-muted p-2 rounded">{step.snippet}</pre>
+
+          {/* Test-level error / snippet */}
+          {(step.error || step.snippet) && (
+            <div className="p-3 space-y-2">
+              {step.error && (
+                <pre className="text-red-600 dark:text-red-400 whitespace-pre-wrap break-words text-[11px] bg-red-50 dark:bg-red-950/20 p-2 rounded">
+                  {step.error}
+                </pre>
+              )}
+              {step.snippet && (
+                <pre className="text-muted-foreground whitespace-pre-wrap text-[11px] bg-muted p-2 rounded">
+                  {step.snippet}
+                </pre>
+              )}
+            </div>
           )}
         </div>
       )}
